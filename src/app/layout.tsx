@@ -7,7 +7,7 @@ import Sidebar from '@/components/Sidebar'
 const inter = Inter({ subsets: ['latin'] })
 
 export const metadata: Metadata = {
-  title: 'PCARDYL - Gestión de Facturas',
+  title: 'PACARDYL - Gestión de Facturas',
   description: 'Sistema de revisión y conciliación de facturas electrónicas DIAN',
 }
 
