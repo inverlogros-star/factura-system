@@ -1,63 +1,40 @@
-'use client'
-// In-memory store for demo — replace with Supabase calls in production
 import type { Factura, ReciboMercancia, ResultadoComparacion } from '@/types'
 
-const KEY_FACTURAS = 'pcardyl_facturas'
-const KEY_RECIBOS = 'pcardyl_recibos'
-const KEY_COMPARACIONES = 'pcardyl_comparaciones'
-
-function load<T>(key: string): T[] {
-  if (typeof window === 'undefined') return []
-  try {
-    return JSON.parse(localStorage.getItem(key) || '[]')
-  } catch {
-    return []
-  }
-}
-
-function save<T>(key: string, data: T[]): void {
-  if (typeof window === 'undefined') return
-  localStorage.setItem(key, JSON.stringify(data))
-}
-
 export const storeFacturas = {
-  getAll: (): Factura[] => load<Factura>(KEY_FACTURAS),
-  save: (f: Factura) => {
-    const all = load<Factura>(KEY_FACTURAS)
-    const idx = all.findIndex(x => x.id === f.id)
-    if (idx >= 0) all[idx] = f
-    else all.push(f)
-    save(KEY_FACTURAS, all)
+  getAll: async (): Promise<Factura[]> => {
+    const res = await fetch('/api/facturas')
+    if (!res.ok) return []
+    return res.json()
   },
-  delete: (id: string) => {
-    save(KEY_FACTURAS, load<Factura>(KEY_FACTURAS).filter(f => f.id !== id))
+  save: async (f: Factura): Promise<void> => {
+    await fetch('/api/facturas', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(f) })
+  },
+  delete: async (id: string): Promise<void> => {
+    await fetch(`/api/facturas/${id}`, { method: 'DELETE' })
   },
 }
 
 export const storeRecibos = {
-  getAll: (): ReciboMercancia[] => load<ReciboMercancia>(KEY_RECIBOS),
-  save: (r: ReciboMercancia) => {
-    const all = load<ReciboMercancia>(KEY_RECIBOS)
-    const idx = all.findIndex(x => x.id === r.id)
-    if (idx >= 0) all[idx] = r
-    else all.push(r)
-    save(KEY_RECIBOS, all)
+  getAll: async (): Promise<ReciboMercancia[]> => {
+    const res = await fetch('/api/recibos')
+    if (!res.ok) return []
+    return res.json()
   },
-  delete: (id: string) => {
-    save(KEY_RECIBOS, load<ReciboMercancia>(KEY_RECIBOS).filter(r => r.id !== id))
+  save: async (r: ReciboMercancia): Promise<void> => {
+    await fetch('/api/recibos', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(r) })
+  },
+  delete: async (id: string): Promise<void> => {
+    await fetch(`/api/recibos/${id}`, { method: 'DELETE' })
   },
 }
 
 export const storeComparaciones = {
-  getAll: (): ResultadoComparacion[] => load<ResultadoComparacion>(KEY_COMPARACIONES),
-  save: (c: ResultadoComparacion) => {
-    const all = load<ResultadoComparacion>(KEY_COMPARACIONES)
-    const idx = all.findIndex(x => x.id === c.id)
-    if (idx >= 0) all[idx] = c
-    else all.push(c)
-    save(KEY_COMPARACIONES, all)
+  getAll: async (): Promise<ResultadoComparacion[]> => {
+    const res = await fetch('/api/comparaciones')
+    if (!res.ok) return []
+    return res.json()
   },
-  delete: (id: string) => {
-    save(KEY_COMPARACIONES, load<ResultadoComparacion>(KEY_COMPARACIONES).filter(c => c.id !== id))
+  save: async (c: ResultadoComparacion): Promise<void> => {
+    await fetch('/api/comparaciones', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(c) })
   },
 }

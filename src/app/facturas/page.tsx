@@ -16,7 +16,6 @@ const ESTADO_LABELS: Record<Factura['estado'], string> = {
   con_diferencias: 'Con diferencias',
   rechazada: 'Rechazada',
 }
-
 const ESTADO_VARIANT: Record<Factura['estado'], 'default' | 'secondary' | 'destructive' | 'outline'> = {
   pendiente: 'secondary',
   conciliada: 'default',
@@ -30,17 +29,15 @@ export default function FacturasPage() {
   const [seleccionada, setSeleccionada] = useState<Factura | null>(null)
   const inputRef = useRef<HTMLInputElement>(null)
 
-  useEffect(() => { setFacturas(storeFacturas.getAll()) }, [])
+  const recargar = async () => setFacturas(await storeFacturas.getAll())
+  useEffect(() => { recargar() }, [])
 
   async function handleArchivos(files: FileList | null) {
     if (!files || files.length === 0) return
     setCargando(true)
     let importadas = 0
     for (const file of Array.from(files)) {
-      if (!file.name.endsWith('.xml')) {
-        toast.error(`${file.name} no es un archivo XML`)
-        continue
-      }
+      if (!file.name.endsWith('.xml')) { toast.error(`${file.name} no es XML`); continue }
       try {
         const text = await file.text()
         const datos = await parsearFacturaDIAN(text)
@@ -50,20 +47,20 @@ export default function FacturasPage() {
           estado: 'pendiente',
           creadoEn: new Date().toISOString(),
         }
-        storeFacturas.save(factura)
+        await storeFacturas.save(factura)
         importadas++
       } catch (err) {
-        toast.error(`Error al leer ${file.name}: ${(err as Error).message}`)
+        toast.error(`Error en ${file.name}: ${(err as Error).message}`)
       }
     }
-    setFacturas(storeFacturas.getAll())
+    await recargar()
     setCargando(false)
     if (importadas > 0) toast.success(`${importadas} factura(s) importada(s)`)
   }
 
-  function eliminar(id: string) {
-    storeFacturas.delete(id)
-    setFacturas(storeFacturas.getAll())
+  async function eliminar(id: string) {
+    await storeFacturas.delete(id)
+    await recargar()
     toast.success('Factura eliminada')
   }
 
@@ -78,14 +75,8 @@ export default function FacturasPage() {
           <Upload size={16} className="mr-2" />
           {cargando ? 'Importando...' : 'Subir XML'}
         </Button>
-        <input
-          ref={inputRef}
-          type="file"
-          accept=".xml"
-          multiple
-          className="hidden"
-          onChange={e => handleArchivos(e.target.files)}
-        />
+        <input ref={inputRef} type="file" accept=".xml" multiple className="hidden"
+          onChange={e => handleArchivos(e.target.files)} />
       </div>
 
       {facturas.length === 0 ? (
@@ -98,14 +89,12 @@ export default function FacturasPage() {
         </Card>
       ) : (
         <Card>
-          <CardHeader>
-            <CardTitle className="text-base">{facturas.length} factura(s)</CardTitle>
-          </CardHeader>
+          <CardHeader><CardTitle className="text-base">{facturas.length} factura(s)</CardTitle></CardHeader>
           <CardContent className="p-0">
             <table className="w-full text-sm">
               <thead className="bg-gray-50 border-b">
                 <tr>
-                  {['No. Factura', 'Proveedor', 'NIT', 'Fecha', 'Total', 'Estado', ''].map(h => (
+                  {['No. Factura','Proveedor','NIT','Fecha','Total','Estado',''].map(h => (
                     <th key={h} className="text-left px-4 py-3 font-medium text-gray-600">{h}</th>
                   ))}
                 </tr>
@@ -117,18 +106,14 @@ export default function FacturasPage() {
                     <td className="px-4 py-3">{f.proveedor || '—'}</td>
                     <td className="px-4 py-3 text-gray-500">{f.nitProveedor || '—'}</td>
                     <td className="px-4 py-3 text-gray-500">{f.fecha}</td>
-                    <td className="px-4 py-3 font-medium">${f.total.toLocaleString('es-CO')}</td>
+                    <td className="px-4 py-3 font-medium">${Number(f.total).toLocaleString('es-CO')}</td>
                     <td className="px-4 py-3">
                       <Badge variant={ESTADO_VARIANT[f.estado]}>{ESTADO_LABELS[f.estado]}</Badge>
                     </td>
                     <td className="px-4 py-3">
                       <div className="flex gap-2">
-                        <Button size="sm" variant="ghost" onClick={() => setSeleccionada(f)}>
-                          <Eye size={14} />
-                        </Button>
-                        <Button size="sm" variant="ghost" onClick={() => eliminar(f.id)}>
-                          <Trash2 size={14} className="text-red-500" />
-                        </Button>
+                        <Button size="sm" variant="ghost" onClick={() => setSeleccionada(f)}><Eye size={14} /></Button>
+                        <Button size="sm" variant="ghost" onClick={() => eliminar(f.id)}><Trash2 size={14} className="text-red-500" /></Button>
                       </div>
                     </td>
                   </tr>
@@ -138,10 +123,7 @@ export default function FacturasPage() {
           </CardContent>
         </Card>
       )}
-
-      {seleccionada && (
-        <DetalleFactura factura={seleccionada} onClose={() => setSeleccionada(null)} />
-      )}
+      {seleccionada && <DetalleFactura factura={seleccionada} onClose={() => setSeleccionada(null)} />}
     </div>
   )
 }

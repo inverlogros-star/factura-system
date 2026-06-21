@@ -13,9 +13,9 @@ export default function Dashboard() {
   const [comparaciones, setComparaciones] = useState<ResultadoComparacion[]>([])
 
   useEffect(() => {
-    setFacturas(storeFacturas.getAll())
-    setRecibos(storeRecibos.getAll())
-    setComparaciones(storeComparaciones.getAll())
+    storeFacturas.getAll().then(setFacturas)
+    storeRecibos.getAll().then(setRecibos)
+    storeComparaciones.getAll().then(setComparaciones)
   }, [])
 
   const pendientes = facturas.filter(f => f.estado === 'pendiente').length
@@ -32,7 +32,7 @@ export default function Dashboard() {
     { label: 'Rechazadas', value: rechazadas, icon: XCircle, color: 'text-gray-600', bg: 'bg-gray-100' },
   ]
 
-  const recientes = comparaciones.slice(-5).reverse()
+  const recientes = comparaciones.slice(0, 5)
 
   return (
     <div className="space-y-6">
@@ -59,9 +59,7 @@ export default function Dashboard() {
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         <Card>
-          <CardHeader>
-            <CardTitle className="text-base">Acciones rápidas</CardTitle>
-          </CardHeader>
+          <CardHeader><CardTitle className="text-base">Acciones rápidas</CardTitle></CardHeader>
           <CardContent className="space-y-2">
             <Link href="/facturas" className="flex items-center gap-3 p-3 rounded-lg hover:bg-gray-50 border border-gray-200 transition-colors">
               <FileText size={18} className="text-blue-600" />
@@ -79,9 +77,7 @@ export default function Dashboard() {
         </Card>
 
         <Card>
-          <CardHeader>
-            <CardTitle className="text-base">Comparaciones recientes</CardTitle>
-          </CardHeader>
+          <CardHeader><CardTitle className="text-base">Comparaciones recientes</CardTitle></CardHeader>
           <CardContent>
             {recientes.length === 0 ? (
               <p className="text-sm text-gray-400 text-center py-4">Sin comparaciones aún</p>

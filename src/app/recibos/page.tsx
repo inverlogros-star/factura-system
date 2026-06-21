@@ -15,17 +15,15 @@ export default function RecibosPage() {
   const [seleccionado, setSeleccionado] = useState<ReciboMercancia | null>(null)
   const inputRef = useRef<HTMLInputElement>(null)
 
-  useEffect(() => { setRecibos(storeRecibos.getAll()) }, [])
+  const recargar = async () => setRecibos(await storeRecibos.getAll())
+  useEffect(() => { recargar() }, [])
 
   async function handleArchivos(files: FileList | null) {
     if (!files || files.length === 0) return
     setCargando(true)
     let importados = 0
     for (const file of Array.from(files)) {
-      if (!file.name.endsWith('.xml')) {
-        toast.error(`${file.name} no es un archivo XML`)
-        continue
-      }
+      if (!file.name.endsWith('.xml')) { toast.error(`${file.name} no es XML`); continue }
       try {
         const text = await file.text()
         const datos = await parsearReciboXML(text)
@@ -34,20 +32,20 @@ export default function RecibosPage() {
           ...datos,
           creadoEn: new Date().toISOString(),
         }
-        storeRecibos.save(recibo)
+        await storeRecibos.save(recibo)
         importados++
       } catch (err) {
-        toast.error(`Error al leer ${file.name}: ${(err as Error).message}`)
+        toast.error(`Error en ${file.name}: ${(err as Error).message}`)
       }
     }
-    setRecibos(storeRecibos.getAll())
+    await recargar()
     setCargando(false)
     if (importados > 0) toast.success(`${importados} recibo(s) importado(s)`)
   }
 
-  function eliminar(id: string) {
-    storeRecibos.delete(id)
-    setRecibos(storeRecibos.getAll())
+  async function eliminar(id: string) {
+    await storeRecibos.delete(id)
+    await recargar()
     toast.success('Recibo eliminado')
   }
 
@@ -62,14 +60,8 @@ export default function RecibosPage() {
           <Upload size={16} className="mr-2" />
           {cargando ? 'Importando...' : 'Subir XML'}
         </Button>
-        <input
-          ref={inputRef}
-          type="file"
-          accept=".xml"
-          multiple
-          className="hidden"
-          onChange={e => handleArchivos(e.target.files)}
-        />
+        <input ref={inputRef} type="file" accept=".xml" multiple className="hidden"
+          onChange={e => handleArchivos(e.target.files)} />
       </div>
 
       {recibos.length === 0 ? (
@@ -82,14 +74,12 @@ export default function RecibosPage() {
         </Card>
       ) : (
         <Card>
-          <CardHeader>
-            <CardTitle className="text-base">{recibos.length} recibo(s)</CardTitle>
-          </CardHeader>
+          <CardHeader><CardTitle className="text-base">{recibos.length} recibo(s)</CardTitle></CardHeader>
           <CardContent className="p-0">
             <table className="w-full text-sm">
               <thead className="bg-gray-50 border-b">
                 <tr>
-                  {['No. Recibo', 'Proveedor', 'NIT', 'Fecha', 'Total', 'Productos', ''].map(h => (
+                  {['No. Recibo','Proveedor','NIT','Fecha','Total','Productos',''].map(h => (
                     <th key={h} className="text-left px-4 py-3 font-medium text-gray-600">{h}</th>
                   ))}
                 </tr>
@@ -101,16 +91,12 @@ export default function RecibosPage() {
                     <td className="px-4 py-3">{r.proveedor || '—'}</td>
                     <td className="px-4 py-3 text-gray-500">{r.nitProveedor || '—'}</td>
                     <td className="px-4 py-3 text-gray-500">{r.fecha}</td>
-                    <td className="px-4 py-3 font-medium">${r.total.toLocaleString('es-CO')}</td>
+                    <td className="px-4 py-3 font-medium">${Number(r.total).toLocaleString('es-CO')}</td>
                     <td className="px-4 py-3 text-gray-500">{r.productos.length} ítem(s)</td>
                     <td className="px-4 py-3">
                       <div className="flex gap-2">
-                        <Button size="sm" variant="ghost" onClick={() => setSeleccionado(r)}>
-                          <Eye size={14} />
-                        </Button>
-                        <Button size="sm" variant="ghost" onClick={() => eliminar(r.id)}>
-                          <Trash2 size={14} className="text-red-500" />
-                        </Button>
+                        <Button size="sm" variant="ghost" onClick={() => setSeleccionado(r)}><Eye size={14} /></Button>
+                        <Button size="sm" variant="ghost" onClick={() => eliminar(r.id)}><Trash2 size={14} className="text-red-500" /></Button>
                       </div>
                     </td>
                   </tr>
@@ -120,10 +106,7 @@ export default function RecibosPage() {
           </CardContent>
         </Card>
       )}
-
-      {seleccionado && (
-        <DetalleRecibo recibo={seleccionado} onClose={() => setSeleccionado(null)} />
-      )}
+      {seleccionado && <DetalleRecibo recibo={seleccionado} onClose={() => setSeleccionado(null)} />}
     </div>
   )
 }

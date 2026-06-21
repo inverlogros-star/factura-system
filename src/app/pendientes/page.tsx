@@ -10,17 +10,14 @@ export default function PendientesPage() {
   const [pendientes, setPendientes] = useState<Factura[]>([])
 
   useEffect(() => {
-    const all = storeFacturas.getAll()
-    setPendientes(all.filter(f => f.estado === 'pendiente'))
+    storeFacturas.getAll().then(all => setPendientes(all.filter(f => f.estado === 'pendiente')))
   }, [])
 
   return (
     <div className="space-y-6">
       <div>
         <h1 className="text-2xl font-bold text-gray-900">Facturas Pendientes</h1>
-        <p className="text-gray-500 text-sm mt-1">
-          Facturas que aún no tienen un recibo de mercancía asociado
-        </p>
+        <p className="text-gray-500 text-sm mt-1">Facturas sin recibo de mercancía asociado</p>
       </div>
 
       {pendientes.length === 0 ? (
@@ -44,26 +41,22 @@ export default function PendientesPage() {
               <table className="w-full text-sm">
                 <thead className="bg-gray-50 border-b">
                   <tr>
-                    {['No. Factura', 'Proveedor', 'NIT', 'Fecha', 'Total', 'Estado', 'Días en espera'].map(h => (
+                    {['No. Factura','Proveedor','NIT','Fecha','Total','Estado','Días en espera'].map(h => (
                       <th key={h} className="text-left px-4 py-3 font-medium text-gray-600">{h}</th>
                     ))}
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100">
                   {pendientes.map(f => {
-                    const dias = Math.floor(
-                      (Date.now() - new Date(f.creadoEn).getTime()) / (1000 * 60 * 60 * 24)
-                    )
+                    const dias = Math.floor((Date.now() - new Date(f.creadoEn).getTime()) / 86400000)
                     return (
                       <tr key={f.id} className="hover:bg-gray-50">
                         <td className="px-4 py-3 font-mono font-medium">{f.numeroFactura}</td>
                         <td className="px-4 py-3">{f.proveedor || '—'}</td>
                         <td className="px-4 py-3 text-gray-500">{f.nitProveedor || '—'}</td>
                         <td className="px-4 py-3 text-gray-500">{f.fecha}</td>
-                        <td className="px-4 py-3 font-medium">${f.total.toLocaleString('es-CO')}</td>
-                        <td className="px-4 py-3">
-                          <Badge variant="secondary">Pendiente</Badge>
-                        </td>
+                        <td className="px-4 py-3 font-medium">${Number(f.total).toLocaleString('es-CO')}</td>
+                        <td className="px-4 py-3"><Badge variant="secondary">Pendiente</Badge></td>
                         <td className="px-4 py-3">
                           <span className={`font-medium ${dias > 7 ? 'text-red-600' : dias > 3 ? 'text-yellow-600' : 'text-gray-600'}`}>
                             {dias} día(s)

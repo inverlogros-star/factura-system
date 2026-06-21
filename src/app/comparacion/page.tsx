@@ -4,7 +4,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { GitCompareArrows, AlertTriangle, CheckCircle2, ChevronDown, ChevronUp } from 'lucide-react'
+import { GitCompareArrows, ChevronDown, ChevronUp } from 'lucide-react'
 import { storeFacturas, storeRecibos, storeComparaciones } from '@/lib/store'
 import { compararFacturaConRecibo } from '@/lib/comparador'
 import type { Factura, ReciboMercancia, ResultadoComparacion, TipoDiferencia } from '@/types'
@@ -39,11 +39,9 @@ function ResultadoCard({ resultado }: { resultado: ResultadoComparacion }) {
             <p className="text-sm text-gray-500">{resultado.proveedor}</p>
           </div>
           <div className="flex items-center gap-2">
-            {resultado.tieneDiferencias ? (
-              <Badge variant="destructive">{resultado.diferencias.length} diferencia(s)</Badge>
-            ) : (
-              <Badge className="bg-green-100 text-green-800">Sin diferencias</Badge>
-            )}
+            {resultado.tieneDiferencias
+              ? <Badge variant="destructive">{resultado.diferencias.length} diferencia(s)</Badge>
+              : <Badge className="bg-green-100 text-green-800">Sin diferencias</Badge>}
             <Button size="sm" variant="ghost" onClick={() => setExpandido(e => !e)}>
               {expandido ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
             </Button>
@@ -52,16 +50,16 @@ function ResultadoCard({ resultado }: { resultado: ResultadoComparacion }) {
         <div className="grid grid-cols-3 gap-3 mt-2 text-xs">
           <div className="bg-gray-50 p-2 rounded">
             <p className="text-gray-500">Total Factura</p>
-            <p className="font-bold">${resultado.valorTotalFactura.toLocaleString('es-CO')}</p>
+            <p className="font-bold">${Number(resultado.valorTotalFactura).toLocaleString('es-CO')}</p>
           </div>
           <div className="bg-gray-50 p-2 rounded">
             <p className="text-gray-500">Total Recibo</p>
-            <p className="font-bold">${resultado.valorTotalRecibo.toLocaleString('es-CO')}</p>
+            <p className="font-bold">${Number(resultado.valorTotalRecibo).toLocaleString('es-CO')}</p>
           </div>
           <div className={`p-2 rounded ${resultado.valorDiferenciaTotal === 0 ? 'bg-green-50' : 'bg-red-50'}`}>
             <p className="text-gray-500">Diferencia</p>
             <p className={`font-bold ${resultado.valorDiferenciaTotal === 0 ? 'text-green-700' : 'text-red-700'}`}>
-              ${resultado.valorDiferenciaTotal.toLocaleString('es-CO')}
+              ${Number(resultado.valorDiferenciaTotal).toLocaleString('es-CO')}
             </p>
           </div>
         </div>
@@ -74,11 +72,11 @@ function ResultadoCard({ resultado }: { resultado: ResultadoComparacion }) {
               <div className="flex items-center justify-between mb-1">
                 <span className="font-semibold">{TIPO_LABEL[d.tipoDiferencia]}</span>
                 {d.valorDiferenciaTotal !== undefined && (
-                  <span className="font-bold">Δ ${d.valorDiferenciaTotal.toLocaleString('es-CO')}</span>
+                  <span className="font-bold">Δ ${Number(d.valorDiferenciaTotal).toLocaleString('es-CO')}</span>
                 )}
               </div>
               <p className="font-medium mb-1">{d.descripcion}</p>
-              <div className="grid grid-cols-2 gap-2 text-xs opacity-80 mb-2">
+              <div className="grid grid-cols-2 gap-2 opacity-80 mb-2">
                 {d.codigoRecibo && <span>Cód. recibo: <code>{d.codigoRecibo}</code></span>}
                 {d.codigoFactura && <span>Cód. factura: <code>{d.codigoFactura}</code></span>}
                 {d.cantidadRecibida !== undefined && <span>Cant. recibida: {d.cantidadRecibida}</span>}
@@ -87,7 +85,7 @@ function ResultadoCard({ resultado }: { resultado: ResultadoComparacion }) {
                 {d.precioFactura !== undefined && <span>Precio factura: ${d.precioFactura}</span>}
               </div>
               <div className="bg-white/60 rounded p-2 border border-current/20">
-                <p className="font-semibold text-xs mb-1">Nota:</p>
+                <p className="font-semibold mb-1">Nota:</p>
                 <p>{d.nota}</p>
               </div>
             </div>
@@ -104,48 +102,47 @@ export default function ComparacionPage() {
   const [resultados, setResultados] = useState<ResultadoComparacion[]>([])
   const [facturaId, setFacturaId] = useState('')
   const [reciboId, setReciboId] = useState('')
+  const [procesando, setProcesando] = useState(false)
 
-  useEffect(() => {
-    setFacturas(storeFacturas.getAll())
-    setRecibos(storeRecibos.getAll())
-    setResultados(storeComparaciones.getAll())
-  }, [])
+  const recargar = async () => {
+    setFacturas(await storeFacturas.getAll())
+    setRecibos(await storeRecibos.getAll())
+    setResultados(await storeComparaciones.getAll())
+  }
+  useEffect(() => { recargar() }, [])
 
-  function comparar() {
+  async function comparar() {
     const factura = facturas.find(f => f.id === facturaId)
     const recibo = recibos.find(r => r.id === reciboId)
-    if (!factura || !recibo) {
-      toast.error('Selecciona una factura y un recibo')
-      return
-    }
+    if (!factura || !recibo) { toast.error('Selecciona una factura y un recibo'); return }
+    setProcesando(true)
     const resultado = compararFacturaConRecibo(factura, recibo)
-    storeComparaciones.save(resultado)
-
-    // Actualizar estado de la factura
-    const facturaActualizada: Factura = {
+    await storeComparaciones.save(resultado)
+    await storeFacturas.save({
       ...factura,
       estado: resultado.tieneDiferencias ? 'con_diferencias' : 'conciliada',
       reciboAsociadoId: recibo.id,
-    }
-    storeFacturas.save(facturaActualizada)
-    setFacturas(storeFacturas.getAll())
-    setResultados(storeComparaciones.getAll())
+    })
+    await recargar()
+    setProcesando(false)
     toast.success(resultado.tieneDiferencias
-      ? `Comparación completada: ${resultado.diferencias.length} diferencia(s) encontrada(s)`
-      : 'Comparación completada: sin diferencias')
+      ? `${resultado.diferencias.length} diferencia(s) encontrada(s)`
+      : 'Sin diferencias — factura conciliada')
   }
 
-  function compararTodo() {
+  async function compararTodo() {
+    setProcesando(true)
+    const pendientes = facturas.filter(f => f.estado === 'pendiente')
     let procesadas = 0
-    for (const factura of facturas.filter(f => f.estado === 'pendiente')) {
+    for (const factura of pendientes) {
       const recibo = recibos.find(r =>
         r.nitProveedor === factura.nitProveedor ||
-        r.proveedor.toLowerCase().includes(factura.proveedor.toLowerCase())
+        r.proveedor?.toLowerCase().includes(factura.proveedor?.toLowerCase() ?? '')
       )
       if (recibo) {
         const resultado = compararFacturaConRecibo(factura, recibo)
-        storeComparaciones.save(resultado)
-        storeFacturas.save({
+        await storeComparaciones.save(resultado)
+        await storeFacturas.save({
           ...factura,
           estado: resultado.tieneDiferencias ? 'con_diferencias' : 'conciliada',
           reciboAsociadoId: recibo.id,
@@ -153,8 +150,8 @@ export default function ComparacionPage() {
         procesadas++
       }
     }
-    setFacturas(storeFacturas.getAll())
-    setResultados(storeComparaciones.getAll())
+    await recargar()
+    setProcesando(false)
     toast.success(`${procesadas} factura(s) procesada(s) automáticamente`)
   }
 
@@ -166,17 +163,13 @@ export default function ComparacionPage() {
       </div>
 
       <Card>
-        <CardHeader>
-          <CardTitle className="text-base">Comparar manualmente</CardTitle>
-        </CardHeader>
+        <CardHeader><CardTitle className="text-base">Comparar manualmente</CardTitle></CardHeader>
         <CardContent className="space-y-4">
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
               <label className="text-sm font-medium">Factura</label>
               <Select value={facturaId} onValueChange={(v) => setFacturaId(v ?? '')}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Selecciona factura..." />
-                </SelectTrigger>
+                <SelectTrigger><SelectValue placeholder="Selecciona factura..." /></SelectTrigger>
                 <SelectContent>
                   {facturas.map(f => (
                     <SelectItem key={f.id} value={f.id}>
@@ -189,9 +182,7 @@ export default function ComparacionPage() {
             <div className="space-y-2">
               <label className="text-sm font-medium">Recibo de mercancía</label>
               <Select value={reciboId} onValueChange={(v) => setReciboId(v ?? '')}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Selecciona recibo..." />
-                </SelectTrigger>
+                <SelectTrigger><SelectValue placeholder="Selecciona recibo..." /></SelectTrigger>
                 <SelectContent>
                   {recibos.map(r => (
                     <SelectItem key={r.id} value={r.id}>
@@ -203,18 +194,18 @@ export default function ComparacionPage() {
             </div>
           </div>
           <div className="flex gap-3">
-            <Button onClick={comparar} disabled={!facturaId || !reciboId}>
+            <Button onClick={comparar} disabled={!facturaId || !reciboId || procesando}>
               <GitCompareArrows size={16} className="mr-2" />
-              Comparar
+              {procesando ? 'Procesando...' : 'Comparar'}
             </Button>
-            <Button variant="outline" onClick={compararTodo}>
+            <Button variant="outline" onClick={compararTodo} disabled={procesando}>
               Comparar todo automáticamente
             </Button>
           </div>
         </CardContent>
       </Card>
 
-      {resultados.length > 0 && (
+      {resultados.length > 0 ? (
         <div className="space-y-4">
           <h2 className="text-lg font-semibold">
             Resultados ({resultados.length})
@@ -223,13 +214,9 @@ export default function ComparacionPage() {
               {resultados.filter(r => r.tieneDiferencias).length} con diferencias
             </span>
           </h2>
-          {resultados.slice().reverse().map(r => (
-            <ResultadoCard key={r.id} resultado={r} />
-          ))}
+          {resultados.map(r => <ResultadoCard key={r.id} resultado={r} />)}
         </div>
-      )}
-
-      {resultados.length === 0 && (
+      ) : (
         <Card>
           <CardContent className="py-16 text-center">
             <GitCompareArrows size={48} className="mx-auto text-gray-300 mb-4" />
