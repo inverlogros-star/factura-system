@@ -9,27 +9,56 @@ export function ultimos4Digitos(numeroFactura: string): string {
   return soloDigitos.slice(-4)
 }
 
-// Busca el recibo que coincide con los últimos 4 dígitos del número de factura
+// Normaliza NIT: quita guiones, puntos y dígito verificador → solo dígitos base
+function normalizarNIT(nit: string): string {
+  return nit.replace(/[.\-\s]/g, '').replace(/\d$/, s => s).slice(0, 9)
+}
+
+// Busca el recibo que coincide con la factura usando múltiples estrategias
 export function encontrarReciboPorFactura(
   factura: Factura,
   recibos: ReciboMercancia[]
 ): ReciboMercancia | undefined {
   const digitos = ultimos4Digitos(factura.numeroFactura)
-  // 1. Coincidir por últimos 4 dígitos del número de recibo
-  const porDigitos = recibos.find(r => r.numeroRecibo.replace(/\D/g, '').endsWith(digitos))
+  const nitFact = normalizarNIT(factura.nitProveedor || '')
+
+  // 1. Últimos 4 dígitos del número de factura coinciden en cualquier campo del recibo
+  const porDigitos = recibos.find(r =>
+    r.numeroRecibo.replace(/\D/g, '').endsWith(digitos) ||
+    (r.xmlRaw && r.xmlRaw.includes(digitos))
+  )
   if (porDigitos) return porDigitos
-  // 2. Coincidir por NIT
-  if (factura.nitProveedor) {
-    const porNit = recibos.find(r => r.nitProveedor === factura.nitProveedor)
+
+  // 2. NIT normalizado (ignora dígito verificador y puntos)
+  if (nitFact.length >= 6) {
+    const porNit = recibos.find(r => {
+      const nitRec = normalizarNIT(r.nitProveedor || '')
+      return nitRec.length >= 6 && (
+        nitRec.startsWith(nitFact) ||
+        nitFact.startsWith(nitRec) ||
+        nitRec === nitFact
+      )
+    })
     if (porNit) return porNit
   }
-  // 3. Coincidir por nombre de proveedor
+
+  // 3. Palabras clave del nombre del proveedor (al menos 1 palabra significativa en común)
   if (factura.proveedor) {
-    return recibos.find(r =>
-      r.proveedor?.toLowerCase().includes(factura.proveedor.toLowerCase()) ||
-      factura.proveedor.toLowerCase().includes(r.proveedor?.toLowerCase() ?? '')
-    )
+    const palabrasFact = factura.proveedor.toLowerCase()
+      .split(/\s+/)
+      .filter(p => p.length > 3 && !['s.a.', 'ltda', 'sas', 'comercio', 'de', 'la', 'del'].includes(p))
+
+    const porNombre = recibos.find(r => {
+      if (!r.proveedor) return false
+      const nombreRec = r.proveedor.toLowerCase()
+      return palabrasFact.some(p => nombreRec.includes(p))
+    })
+    if (porNombre) return porNombre
   }
+
+  // 4. Un solo recibo disponible → asociarlo directamente
+  if (recibos.length === 1) return recibos[0]
+
   return undefined
 }
 
