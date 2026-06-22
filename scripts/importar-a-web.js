@@ -73,6 +73,7 @@ async function main() {
       const resultado = await postJSON(`${APP_URL}/api/facturas/importar-xml`, {
         xmlContent,
         nombreArchivo: archivo,
+        forzar: true,  // Siempre actualizar si el total es 0
       })
 
       if (resultado.error) {
