@@ -3,7 +3,7 @@ import { useEffect, useState } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { GitCompareArrows, ChevronDown, ChevronUp, FileDown, CheckSquare, Square } from 'lucide-react'
+import { GitCompareArrows, ChevronDown, ChevronUp, FileDown, CheckSquare, Square, Trash2 } from 'lucide-react'
 import { storeFacturas, storeRecibos, storeComparaciones } from '@/lib/store'
 import { compararFacturaConRecibo, encontrarReciboPorFactura, ultimos4Digitos } from '@/lib/comparador'
 import { generarInformePDF } from '@/lib/informe-pdf'
@@ -29,9 +29,11 @@ const TIPO_COLOR: Record<TipoDiferencia, string> = {
 function ResultadoCard({
   resultado,
   factura,
+  onEliminar,
 }: {
   resultado: ResultadoComparacion
   factura: Factura
+  onEliminar: (id: string, facturaId: string) => void
 }) {
   const [expandido, setExpandido] = useState(false)
 
@@ -65,6 +67,14 @@ function ResultadoCard({
               : <Badge className="bg-green-100 text-green-800">Sin diferencias</Badge>}
             <Button size="sm" variant="outline" onClick={descargarPDF}>
               <FileDown size={14} className="mr-1" /> PDF
+            </Button>
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={() => onEliminar(resultado.id, resultado.facturaId)}
+              title="Eliminar comparación y volver a pendiente"
+            >
+              <Trash2 size={14} className="text-red-500" />
             </Button>
             <Button size="sm" variant="ghost" onClick={() => setExpandido(e => !e)}>
               {expandido ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
@@ -157,6 +167,17 @@ export default function ComparacionPage() {
     } else {
       setSeleccionadas(new Set(facturas.map(f => f.id)))
     }
+  }
+
+  async function eliminarComparacion(comparacionId: string, facturaId: string) {
+    await storeComparaciones.delete(comparacionId)
+    // Resetear la factura a pendiente para poder volver a compararla
+    const factura = facturasMap[facturaId]
+    if (factura) {
+      await storeFacturas.save({ ...factura, estado: 'pendiente', reciboAsociadoId: undefined })
+    }
+    await recargar()
+    toast.success('Comparación eliminada — factura vuelve a estado pendiente')
   }
 
   async function compararSeleccionadas() {
@@ -305,6 +326,7 @@ export default function ComparacionPage() {
               key={r.id}
               resultado={r}
               factura={facturasMap[r.facturaId] ?? ({} as Factura)}
+              onEliminar={eliminarComparacion}
             />
           ))}
         </div>

@@ -37,4 +37,7 @@ export const storeComparaciones = {
   save: async (c: ResultadoComparacion): Promise<void> => {
     await fetch('/api/comparaciones', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(c) })
   },
+  delete: async (id: string): Promise<void> => {
+    await fetch(`/api/comparaciones/${id}`, { method: 'DELETE' })
+  },
 }
