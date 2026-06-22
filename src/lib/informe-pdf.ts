@@ -116,26 +116,15 @@ export async function generarInformePDF(
   doc.text(`DIFERENCIAS POR CÓDIGO DE PRODUCTO (${resultado.diferencias.length})`, 14, y)
   y += 3
 
-  // Totales por tipo
-  let totalDifCantidad = 0, ivasDifCantidad = 0
-  let totalDifPrecio = 0, ivasDifPrecio = 0
-  let totalDifPresentacion = 0, ivasDifPresentacion = 0
-  let totalDifNoEncontrado = 0, ivasDifNoEncontrado = 0
+  // Conteo por tipo de diferencia
+  let cantDifCantidad = 0, cantDifPrecio = 0, cantDifPresentacion = 0, cantDifNoEncontrado = 0
 
   const rows = resultado.diferencias.map((d: Diferencia) => {
     const valDif = d.valorDiferenciaTotal ?? 0
-    // IVA real: buscar en la factura el producto por código
-    const prodFactura = factura.productos.find(p => p.codigo === d.codigoFactura)
-    const ivaReal = prodFactura
-      ? (prodFactura.impuesto / (prodFactura.cantidad || 1)) * (d.cantidadFacturada ?? prodFactura.cantidad)
-      : 0
-
-    if (d.tipoDiferencia === 'cantidad') { totalDifCantidad += valDif; ivasDifCantidad += ivaReal }
-    else if (d.tipoDiferencia === 'precio') { totalDifPrecio += valDif; ivasDifPrecio += ivaReal }
-    else if (d.tipoDiferencia === 'presentacion') { totalDifPresentacion += valDif; ivasDifPresentacion += ivaReal }
-    else { totalDifNoEncontrado += valDif; ivasDifNoEncontrado += ivaReal }
-
-    const totalConIva = valDif + ivaReal
+    if (d.tipoDiferencia === 'cantidad') cantDifCantidad++
+    else if (d.tipoDiferencia === 'precio') cantDifPrecio++
+    else if (d.tipoDiferencia === 'presentacion') cantDifPresentacion++
+    else cantDifNoEncontrado++
 
     return [
       d.codigoFactura || d.codigoRecibo || '—',
@@ -146,8 +135,6 @@ export async function generarInformePDF(
       d.precioRecibo !== undefined ? `$${fmt(d.precioRecibo)}` : '—',
       d.precioFactura !== undefined ? `$${fmt(d.precioFactura)}` : '—',
       `$${fmt(valDif)}`,
-      `$${fmt(ivaReal)}`,
-      `$${fmt(totalConIva)}`,
     ]
   })
 
@@ -155,22 +142,20 @@ export async function generarInformePDF(
     startY: y,
     head: [[
       'Código', 'Descripción', 'Tipo', 'Cant.\nRecibida', 'Cant.\nFacturada',
-      'Precio\nRecibo', 'Precio\nFactura', 'Vlr. Diferencia', 'IVA\nFacturado', 'Total\nDif. + IVA',
+      'Precio\nRecibo', 'Precio\nFactura', 'Vlr. Diferencia',
     ]],
     body: rows,
     styles: { fontSize: 7, cellPadding: 2, overflow: 'linebreak' },
     headStyles: { fillColor: [30, 64, 175], textColor: 255, fontStyle: 'bold', fontSize: 7.5, halign: 'center' },
     columnStyles: {
-      0: { cellWidth: 26, font: 'courier', fontSize: 6.5 },
-      1: { cellWidth: 60 },
-      2: { cellWidth: 24, halign: 'center', fontStyle: 'bold' },
-      3: { cellWidth: 18, halign: 'right' },
-      4: { cellWidth: 18, halign: 'right' },
-      5: { cellWidth: 24, halign: 'right' },
-      6: { cellWidth: 24, halign: 'right' },
-      7: { cellWidth: 26, halign: 'right', fontStyle: 'bold' },
-      8: { cellWidth: 22, halign: 'right' },
-      9: { cellWidth: 26, halign: 'right', fontStyle: 'bold' },
+      0: { cellWidth: 30, font: 'courier', fontSize: 6.5 },
+      1: { cellWidth: 80 },
+      2: { cellWidth: 28, halign: 'center', fontStyle: 'bold' },
+      3: { cellWidth: 20, halign: 'right' },
+      4: { cellWidth: 20, halign: 'right' },
+      5: { cellWidth: 28, halign: 'right' },
+      6: { cellWidth: 28, halign: 'right' },
+      7: { cellWidth: 30, halign: 'right', fontStyle: 'bold' },
     },
     alternateRowStyles: { fillColor: [245, 247, 250] },
     didParseCell(data) {
@@ -181,7 +166,7 @@ export async function generarInformePDF(
         else if (tipo === 'PRESENTACIÓN') data.cell.styles.textColor = [109, 40, 217]
         else if (tipo === 'NO ENCONTRADO') data.cell.styles.textColor = [220, 38, 38]
       }
-      if (data.section === 'body' && (data.column.index === 7 || data.column.index === 9)) {
+      if (data.section === 'body' && data.column.index === 7) {
         const raw = String(data.cell.raw).replace(/[$.,\s]/g, '')
         const val = parseFloat(raw)
         if (val > 0) data.cell.styles.textColor = [185, 28, 28]
@@ -191,37 +176,55 @@ export async function generarInformePDF(
     margin: { left: 10, right: 10 },
   })
 
-  // ── TOTALES ─────────────────────────────────────────────────────────────────
+  // ── TOTALES — tomados directamente de factura y recibo ───────────────────────
   const finalY = (doc as any).lastAutoTable.finalY + 6
 
-  const totalDif = totalDifCantidad + totalDifPrecio + totalDifPresentacion + totalDifNoEncontrado
-  const totalIva = ivasDifCantidad + ivasDifPrecio + ivasDifPresentacion + ivasDifNoEncontrado
+  // Valores reales de la factura
+  const subtotalFactura = Number(factura.subtotal)
+  const ivaFactura      = Number(factura.impuestos)
+  const totalFactura    = Number(factura.total)
+  // Valores del recibo
+  const totalRecibo     = Number(resultado.valorTotalRecibo)
+  // Diferencia neta
+  const difTotal        = totalFactura - totalRecibo
 
   autoTable(doc, {
     startY: finalY,
-    head: [['CONCEPTO', 'VALOR DIFERENCIA MERCANCÍA', 'IVA FACTURADO', 'TOTAL (MERCANCÍA + IVA)']],
+    head: [['CONCEPTO', 'FACTURA', 'RECIBO', 'DIFERENCIA']],
     body: [
-      ['Diferencias por Cantidad',    `$${fmt(totalDifCantidad)}`,     `$${fmt(ivasDifCantidad)}`,     `$${fmt(totalDifCantidad + ivasDifCantidad)}`],
-      ['Diferencias por Precio',      `$${fmt(totalDifPrecio)}`,       `$${fmt(ivasDifPrecio)}`,       `$${fmt(totalDifPrecio + ivasDifPrecio)}`],
-      ['Diferencias por Presentación',`$${fmt(totalDifPresentacion)}`, `$${fmt(ivasDifPresentacion)}`, `$${fmt(totalDifPresentacion + ivasDifPresentacion)}`],
-      ['Productos No Encontrados',    `$${fmt(totalDifNoEncontrado)}`, `$${fmt(ivasDifNoEncontrado)}`, `$${fmt(totalDifNoEncontrado + ivasDifNoEncontrado)}`],
-      ['TOTAL GENERAL',               `$${fmt(totalDif)}`,            `$${fmt(totalIva)}`,            `$${fmt(totalDif + totalIva)}`],
+      ['Subtotal mercancía (sin IVA)', `$${fmt(subtotalFactura)}`, '—', '—'],
+      ['IVA facturado',                `$${fmt(ivaFactura)}`,      '—', '—'],
+      ['Total con IVA / Total recibo', `$${fmt(totalFactura)}`,    `$${fmt(totalRecibo)}`, `$${fmt(difTotal)}`],
+      [`Diferencias encontradas: ${resultado.diferencias.length}  |  Por cantidad: ${cantDifCantidad}  |  Por precio: ${cantDifPrecio}  |  Presentación: ${cantDifPresentacion}  |  No encontrados: ${cantDifNoEncontrado}`, '', '', ''],
     ],
     styles: { fontSize: 8.5, cellPadding: 3, halign: 'right' },
     headStyles: { fillColor: [15, 23, 42], textColor: 255, fontStyle: 'bold' },
     columnStyles: {
-      0: { halign: 'left', fontStyle: 'bold', cellWidth: 80 },
-      1: { cellWidth: 60 },
+      0: { halign: 'left', fontStyle: 'bold', cellWidth: 120 },
+      1: { cellWidth: 50 },
       2: { cellWidth: 50 },
-      3: { cellWidth: 60 },
+      3: { cellWidth: 50 },
     },
     bodyStyles: { fillColor: [248, 250, 252] },
     didParseCell(data) {
-      if (data.section === 'body' && data.row.index === 4) {
+      // Fila "Total con IVA" en azul
+      if (data.section === 'body' && data.row.index === 2) {
         data.cell.styles.fillColor = [30, 64, 175]
         data.cell.styles.textColor = [255, 255, 255]
         data.cell.styles.fontStyle = 'bold'
         data.cell.styles.fontSize = 9
+      }
+      // Fila resumen de conteos en gris claro
+      if (data.section === 'body' && data.row.index === 3) {
+        data.cell.styles.fillColor = [226, 232, 240]
+        data.cell.styles.fontSize = 7.5
+        data.cell.styles.textColor = [50, 50, 80]
+        data.cell.styles.halign = 'left'
+      }
+      // Colorear diferencia
+      if (data.section === 'body' && data.row.index === 2 && data.column.index === 3) {
+        if (difTotal > 0) data.cell.styles.textColor = [255, 200, 200]
+        else if (difTotal < 0) data.cell.styles.textColor = [200, 255, 200]
       }
     },
     margin: { left: 10, right: 10 },
