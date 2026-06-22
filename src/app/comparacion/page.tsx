@@ -4,9 +4,10 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { GitCompareArrows, ChevronDown, ChevronUp } from 'lucide-react'
+import { GitCompareArrows, ChevronDown, ChevronUp, FileDown } from 'lucide-react'
 import { storeFacturas, storeRecibos, storeComparaciones } from '@/lib/store'
 import { compararFacturaConRecibo } from '@/lib/comparador'
+import { generarInformePDF } from '@/lib/informe-pdf'
 import type { Factura, ReciboMercancia, ResultadoComparacion, TipoDiferencia } from '@/types'
 import { toast } from 'sonner'
 
@@ -28,6 +29,16 @@ const TIPO_COLOR: Record<TipoDiferencia, string> = {
 
 function ResultadoCard({ resultado }: { resultado: ResultadoComparacion }) {
   const [expandido, setExpandido] = useState(false)
+
+  async function descargarPDF() {
+    try {
+      await generarInformePDF(resultado, resultado.proveedor || 'PACARDYL')
+      toast.success('Informe PDF generado')
+    } catch (err) {
+      toast.error(`Error al generar PDF: ${(err as Error).message}`)
+    }
+  }
+
   return (
     <Card className={resultado.tieneDiferencias ? 'border-red-200' : 'border-green-200'}>
       <CardHeader className="pb-3">
@@ -42,6 +53,9 @@ function ResultadoCard({ resultado }: { resultado: ResultadoComparacion }) {
             {resultado.tieneDiferencias
               ? <Badge variant="destructive">{resultado.diferencias.length} diferencia(s)</Badge>
               : <Badge className="bg-green-100 text-green-800">Sin diferencias</Badge>}
+            <Button size="sm" variant="outline" onClick={descargarPDF} title="Descargar informe PDF">
+              <FileDown size={14} className="mr-1" /> PDF
+            </Button>
             <Button size="sm" variant="ghost" onClick={() => setExpandido(e => !e)}>
               {expandido ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
             </Button>
