@@ -1,27 +1,16 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { extractText, getDocumentProxy } from 'unpdf'
 import type { ProductoRecibo } from '@/types'
-
-// Polyfill requerido por pdf-parse en entornos serverless (Vercel)
-if (typeof globalThis.DOMMatrix === 'undefined') {
-  ;(globalThis as any).DOMMatrix = class {
-    constructor(_init?: string | number[]) {}
-    static fromMatrix() { return new (globalThis as any).DOMMatrix() }
-    static fromFloat32Array() { return new (globalThis as any).DOMMatrix() }
-    static fromFloat64Array() { return new (globalThis as any).DOMMatrix() }
-    invertSelf() { return this }
-    multiplySelf() { return this }
-    translateSelf() { return this }
-    scaleSelf() { return this }
-    rotateSelf() { return this }
-  }
-}
 
 function limpiarNum(str: string): number {
   return parseFloat(str.replace(/[$\s]/g, '').replace(/\./g, '').replace(',', '.')) || 0
 }
 
+function esNumerico(p: string): boolean {
+  return /^[\d.,\s$]+$/.test(p.trim()) && p.trim().length > 0
+}
+
 function esLinea(line: string): boolean {
-  // Línea que probablemente es un producto: tiene texto y al menos un número
   return line.trim().length > 3 && /\d/.test(line)
 }
 
@@ -31,22 +20,19 @@ export async function POST(req: NextRequest) {
     const file = formData.get('file') as File
     if (!file) return NextResponse.json({ error: 'No se recibió archivo' }, { status: 400 })
 
-    const buffer = Buffer.from(await file.arrayBuffer())
+    const buffer = new Uint8Array(await file.arrayBuffer())
+    const pdf = await getDocumentProxy(buffer)
+    const { text } = await extractText(pdf, { mergePages: true })
 
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const pdfParse = require('pdf-parse')
-    const data = await pdfParse(buffer)
-    const texto: string = data.text
+    const lineas = (text as string).split('\n').map((l: string) => l.trim()).filter(Boolean)
 
-    const lineas = texto.split('\n').map((l: string) => l.trim()).filter(Boolean)
-
-    // Extraer metadatos básicos
     let numeroRecibo = ''
     let proveedor = ''
     let nitProveedor = ''
     let fecha = ''
 
-    for (const linea of lineas.slice(0, 30)) {
+    for (let i = 0; i < Math.min(30, lineas.length); i++) {
+      const linea = lineas[i]
       const lower = linea.toLowerCase()
       if (!numeroRecibo && (lower.includes('recibo') || lower.includes('orden') || lower.includes('pedido'))) {
         const match = linea.match(/[\w\d-]{4,20}/)
@@ -62,14 +48,12 @@ export async function POST(req: NextRequest) {
           nitProveedor = matchNit[0]
         }
       }
-      if (!proveedor && linea.length > 5 && linea.length < 80 && lineas.indexOf(linea) < 10) {
+      if (!proveedor && linea.length > 5 && linea.length < 80 && i < 10) {
         const upper = linea.toUpperCase()
         if (upper === linea && !/^[\d.,\s$]+$/.test(linea.trim())) proveedor = linea
       }
     }
 
-    // Intentar detectar tabla de productos
-    // Buscar línea de encabezados
     const HEADER_KEYWORDS = ['descripcion', 'description', 'producto', 'articulo', 'cantidad', 'precio', 'valor']
     let headerIdx = -1
     for (let i = 0; i < lineas.length; i++) {
@@ -79,48 +63,24 @@ export async function POST(req: NextRequest) {
     }
 
     const productos: ProductoRecibo[] = []
+    const lineasProducto = headerIdx >= 0 ? lineas.slice(headerIdx + 1) : lineas
 
-    if (headerIdx >= 0) {
-      // Parsear desde la línea siguiente al encabezado
-      for (let i = headerIdx + 1; i < lineas.length; i++) {
-        const linea = lineas[i]
-        if (!esLinea(linea)) continue
+    for (const linea of lineasProducto) {
+      if (!esLinea(linea)) continue
+      const partes = linea.split(/\s{2,}|\t/).map(p => p.trim()).filter(Boolean)
+      if (partes.length < 2) continue
 
-        // Separar por espacios múltiples o tabs
-        const partes = linea.split(/\s{2,}|\t/).map(p => p.trim()).filter(Boolean)
-        if (partes.length < 2) continue
+      const numericos = partes.filter(p => esNumerico(p))
+      if (numericos.length === 0) continue
 
-        // Asumir: último = total, penúltimo = precio, antepenúltimo = cantidad, resto = descripción/código
-        const numericos = partes.filter(p => /^[\d.,\s$]+$/.test(p.trim()) && p.trim().length > 0)
-        if (numericos.length === 0) continue
+      const descripcion = partes.filter(p => !esNumerico(p)).join(' ')
+      if (!descripcion) continue
 
-        const descripcion = partes.filter(p => !/^[\d.,\s$]+$/.test(p.trim()) && p.trim().length > 0).join(' ')
-        const subtotal = limpiarNum(numericos[numericos.length - 1])
-        const precioUnitario = numericos.length >= 2 ? limpiarNum(numericos[numericos.length - 2]) : 0
-        const cantidad = numericos.length >= 3 ? limpiarNum(numericos[numericos.length - 3]) : 1
+      const subtotal = limpiarNum(numericos[numericos.length - 1])
+      const precioUnitario = numericos.length >= 2 ? limpiarNum(numericos[numericos.length - 2]) : 0
+      const cantidad = numericos.length >= 3 ? limpiarNum(numericos[numericos.length - 3]) : 1
 
-        if (descripcion && (cantidad > 0 || subtotal > 0)) {
-          productos.push({
-            codigo: String(productos.length + 1).padStart(4, '0'),
-            descripcion,
-            cantidad,
-            precioUnitario,
-            subtotal: subtotal || cantidad * precioUnitario,
-          })
-        }
-      }
-    } else {
-      // Sin encabezado detectado — parsear líneas numéricas
-      for (const linea of lineas) {
-        const partes = linea.split(/\s{2,}|\t/).map(p => p.trim()).filter(Boolean)
-        if (partes.length < 3) continue
-        const numericos = partes.filter(p => /^[\d.,\s$]+$/.test(p.trim()) && p.trim().length > 0)
-        if (numericos.length < 2) continue
-        const descripcion = partes.filter(p => !/^[\d.,\s$]+$/.test(p.trim()) && p.trim().length > 0).join(' ')
-        if (!descripcion) continue
-        const subtotal = limpiarNum(numericos[numericos.length - 1])
-        const precioUnitario = limpiarNum(numericos[numericos.length - 2])
-        const cantidad = numericos.length >= 3 ? limpiarNum(numericos[0]) : 1
+      if (cantidad > 0 || subtotal > 0) {
         productos.push({
           codigo: String(productos.length + 1).padStart(4, '0'),
           descripcion,
