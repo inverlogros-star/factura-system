@@ -3,6 +3,36 @@ import type { Factura, ReciboMercancia, Diferencia, ResultadoComparacion } from 
 const TOLERANCIA_PRECIO = 0.01
 const SIMILITUD_DESCRIPCION = 0.7
 
+// Devuelve los últimos 4 dígitos numéricos del número de factura
+export function ultimos4Digitos(numeroFactura: string): string {
+  const soloDigitos = numeroFactura.replace(/\D/g, '')
+  return soloDigitos.slice(-4)
+}
+
+// Busca el recibo que coincide con los últimos 4 dígitos del número de factura
+export function encontrarReciboPorFactura(
+  factura: Factura,
+  recibos: ReciboMercancia[]
+): ReciboMercancia | undefined {
+  const digitos = ultimos4Digitos(factura.numeroFactura)
+  // 1. Coincidir por últimos 4 dígitos del número de recibo
+  const porDigitos = recibos.find(r => r.numeroRecibo.replace(/\D/g, '').endsWith(digitos))
+  if (porDigitos) return porDigitos
+  // 2. Coincidir por NIT
+  if (factura.nitProveedor) {
+    const porNit = recibos.find(r => r.nitProveedor === factura.nitProveedor)
+    if (porNit) return porNit
+  }
+  // 3. Coincidir por nombre de proveedor
+  if (factura.proveedor) {
+    return recibos.find(r =>
+      r.proveedor?.toLowerCase().includes(factura.proveedor.toLowerCase()) ||
+      factura.proveedor.toLowerCase().includes(r.proveedor?.toLowerCase() ?? '')
+    )
+  }
+  return undefined
+}
+
 function normalizarTexto(texto: string): string {
   return texto
     .toLowerCase()

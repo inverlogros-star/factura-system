@@ -1,5 +1,9 @@
 'use client'
-import type { ResultadoComparacion, Diferencia } from '@/types'
+import type { ResultadoComparacion, Diferencia, Factura } from '@/types'
+
+function fmt(n: number): string {
+  return Number(n).toLocaleString('es-CO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+}
 
 const TIPO_LABEL: Record<string, string> = {
   cantidad: 'CANTIDAD',
@@ -9,11 +13,10 @@ const TIPO_LABEL: Record<string, string> = {
   producto_no_encontrado: 'NO ENCONTRADO',
 }
 
-function fmt(n: number): string {
-  return n.toLocaleString('es-CO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
-}
-
-export async function generarInformePDF(resultado: ResultadoComparacion, empresa: string) {
+export async function generarInformePDF(
+  resultado: ResultadoComparacion,
+  factura: Factura
+) {
   const { default: jsPDF } = await import('jspdf')
   const { default: autoTable } = await import('jspdf-autotable')
 
@@ -24,93 +27,115 @@ export async function generarInformePDF(resultado: ResultadoComparacion, empresa
   })
 
   // ── ENCABEZADO ──────────────────────────────────────────────────────────────
-  doc.setFillColor(30, 64, 175) // azul
-  doc.rect(0, 0, pageW, 22, 'F')
+  doc.setFillColor(30, 64, 175)
+  doc.rect(0, 0, pageW, 26, 'F')
 
   doc.setTextColor(255, 255, 255)
-  doc.setFontSize(16)
+  doc.setFontSize(15)
   doc.setFont('helvetica', 'bold')
-  doc.text(empresa.toUpperCase(), 14, 10)
+  doc.text('SUPERMERCADOS PACARDYL', 14, 10)
 
   doc.setFontSize(10)
   doc.setFont('helvetica', 'normal')
-  doc.text('INFORME DE DIFERENCIAS EN FACTURACIÓN', 14, 17)
+  doc.text('INVERSIONES LOGROS S.A.', 14, 17)
 
   doc.setFontSize(9)
+  doc.setFont('helvetica', 'bold')
+  doc.text('INFORME DE DIFERENCIAS EN FACTURACIÓN', 14, 23)
+
+  doc.setFontSize(8.5)
+  doc.setFont('helvetica', 'normal')
   doc.text(`Generado: ${fechaHoy}`, pageW - 14, 17, { align: 'right' })
+  doc.text(`Proveedor: ${resultado.proveedor || '—'}`, pageW - 14, 23, { align: 'right' })
 
   // ── INFO FACTURA / RECIBO ────────────────────────────────────────────────────
   doc.setTextColor(0, 0, 0)
-  doc.setFontSize(9)
-  doc.setFont('helvetica', 'bold')
-
-  const col1 = 14, col2 = 100, col3 = 190
-  let y = 30
+  let y = 33
 
   doc.setFillColor(241, 245, 249)
-  doc.rect(10, y - 5, pageW - 20, 18, 'F')
-  doc.setDrawColor(200, 200, 200)
-  doc.rect(10, y - 5, pageW - 20, 18, 'S')
+  doc.rect(10, y - 4, pageW - 20, 20, 'F')
+  doc.setDrawColor(200, 210, 230)
+  doc.rect(10, y - 4, pageW - 20, 20, 'S')
 
+  const col1 = 14, col2 = 95, col3 = 180
+
+  doc.setFontSize(8.5)
   doc.setFont('helvetica', 'bold')
-  doc.text('Proveedor:', col1, y)
+  doc.text('No. Factura:', col1, y)
   doc.setFont('helvetica', 'normal')
-  doc.text(resultado.proveedor || '—', col1 + 22, y)
+  doc.text(resultado.numeroFactura, col1 + 24, y)
 
   doc.setFont('helvetica', 'bold')
-  doc.text('No. Factura:', col2, y)
+  doc.text('Últimos 4 dígitos:', col1, y + 6)
   doc.setFont('helvetica', 'normal')
-  doc.text(resultado.numeroFactura, col2 + 25, y)
+  doc.text(resultado.numeroFactura.slice(-4), col1 + 34, y + 6)
 
   doc.setFont('helvetica', 'bold')
-  doc.text('No. Recibo:', col3, y)
+  doc.text('No. Recibo:', col2, y)
   doc.setFont('helvetica', 'normal')
-  doc.text(resultado.numeroRecibo, col3 + 22, y)
-
-  y += 8
+  doc.text(resultado.numeroRecibo, col2 + 22, y)
 
   doc.setFont('helvetica', 'bold')
-  doc.text('Total Factura:', col1, y)
+  doc.text('Total Mercancía Factura:', col2, y + 6)
   doc.setFont('helvetica', 'normal')
-  doc.text(`$${fmt(resultado.valorTotalFactura)}`, col1 + 28, y)
+  doc.text(`$${fmt(factura.subtotal)}`, col2 + 46, y + 6)
 
   doc.setFont('helvetica', 'bold')
-  doc.text('Total Recibo:', col2, y)
+  doc.text('IVA Facturado:', col3, y)
   doc.setFont('helvetica', 'normal')
-  doc.text(`$${fmt(resultado.valorTotalRecibo)}`, col2 + 25, y)
+  doc.text(`$${fmt(factura.impuestos)}`, col3 + 28, y)
 
   doc.setFont('helvetica', 'bold')
-  doc.text('Diferencia Total:', col3, y)
+  doc.text('Total Factura:', col3, y + 6)
   doc.setFontSize(9)
-  const diffColor = resultado.valorDiferenciaTotal !== 0 ? [185, 28, 28] : [21, 128, 61]
-  doc.setTextColor(diffColor[0], diffColor[1], diffColor[2])
+  doc.setTextColor(30, 64, 175)
   doc.setFont('helvetica', 'bold')
-  doc.text(`$${fmt(resultado.valorDiferenciaTotal)}`, col3 + 32, y)
+  doc.text(`$${fmt(factura.total)}`, col3 + 27, y + 6)
   doc.setTextColor(0, 0, 0)
 
-  y += 12
-
-  // ── TABLA DE DIFERENCIAS ────────────────────────────────────────────────────
-  doc.setFontSize(10)
+  y += 6
+  doc.setFontSize(8.5)
   doc.setFont('helvetica', 'bold')
-  doc.text(`DETALLE DE DIFERENCIAS (${resultado.diferencias.length})`, 14, y)
-  y += 4
+  doc.text('Total Recibo:', col1, y + 6)
+  doc.setFont('helvetica', 'normal')
+  doc.text(`$${fmt(resultado.valorTotalRecibo)}`, col1 + 25, y + 6)
 
-  // Acumular totales por tipo
-  let totalDifCantidad = 0
-  let totalDifPrecio = 0
-  let totalDifPresentacion = 0
-  let totalDifNoEncontrado = 0
+  doc.setFont('helvetica', 'bold')
+  doc.text('Diferencia Total:', col2, y + 6)
+  const diffColor = resultado.valorDiferenciaTotal !== 0 ? [185, 28, 28] as const : [21, 128, 61] as const
+  doc.setTextColor(diffColor[0], diffColor[1], diffColor[2])
+  doc.setFont('helvetica', 'bold')
+  doc.text(`$${fmt(resultado.valorDiferenciaTotal)}`, col2 + 32, y + 6)
+  doc.setTextColor(0, 0, 0)
+
+  y += 18
+
+  // ── TABLA DETALLE ────────────────────────────────────────────────────────────
+  doc.setFontSize(9.5)
+  doc.setFont('helvetica', 'bold')
+  doc.text(`DIFERENCIAS POR CÓDIGO DE PRODUCTO (${resultado.diferencias.length})`, 14, y)
+  y += 3
+
+  // Totales por tipo
+  let totalDifCantidad = 0, ivasDifCantidad = 0
+  let totalDifPrecio = 0, ivasDifPrecio = 0
+  let totalDifPresentacion = 0, ivasDifPresentacion = 0
+  let totalDifNoEncontrado = 0, ivasDifNoEncontrado = 0
 
   const rows = resultado.diferencias.map((d: Diferencia) => {
     const valDif = d.valorDiferenciaTotal ?? 0
-    if (d.tipoDiferencia === 'cantidad') totalDifCantidad += valDif
-    else if (d.tipoDiferencia === 'precio') totalDifPrecio += valDif
-    else if (d.tipoDiferencia === 'presentacion') totalDifPresentacion += valDif
-    else totalDifNoEncontrado += valDif
+    // IVA real: buscar en la factura el producto por código
+    const prodFactura = factura.productos.find(p => p.codigo === d.codigoFactura)
+    const ivaReal = prodFactura
+      ? (prodFactura.impuesto / (prodFactura.cantidad || 1)) * (d.cantidadFacturada ?? prodFactura.cantidad)
+      : 0
 
-    // Calcular IVA estimado (19% Colombia) sobre la diferencia
-    const ivaEstimado = Math.abs(valDif) * 0.19
+    if (d.tipoDiferencia === 'cantidad') { totalDifCantidad += valDif; ivasDifCantidad += ivaReal }
+    else if (d.tipoDiferencia === 'precio') { totalDifPrecio += valDif; ivasDifPrecio += ivaReal }
+    else if (d.tipoDiferencia === 'presentacion') { totalDifPresentacion += valDif; ivasDifPresentacion += ivaReal }
+    else { totalDifNoEncontrado += valDif; ivasDifNoEncontrado += ivaReal }
+
+    const totalConIva = valDif + ivaReal
 
     return [
       d.codigoFactura || d.codigoRecibo || '—',
@@ -121,36 +146,31 @@ export async function generarInformePDF(resultado: ResultadoComparacion, empresa
       d.precioRecibo !== undefined ? `$${fmt(d.precioRecibo)}` : '—',
       d.precioFactura !== undefined ? `$${fmt(d.precioFactura)}` : '—',
       `$${fmt(valDif)}`,
-      `$${fmt(ivaEstimado)}`,
+      `$${fmt(ivaReal)}`,
+      `$${fmt(totalConIva)}`,
     ]
   })
 
   autoTable(doc, {
     startY: y,
     head: [[
-      'Cód. Producto',
-      'Descripción',
-      'Tipo Diferencia',
-      'Cant. Recibida',
-      'Cant. Facturada',
-      'Precio Recibo',
-      'Precio Factura',
-      'Vlr. Diferencia',
-      'IVA (19%) Dif.',
+      'Código', 'Descripción', 'Tipo', 'Cant.\nRecibida', 'Cant.\nFacturada',
+      'Precio\nRecibo', 'Precio\nFactura', 'Vlr. Diferencia', 'IVA\nFacturado', 'Total\nDif. + IVA',
     ]],
     body: rows,
-    styles: { fontSize: 7.5, cellPadding: 2.5, overflow: 'linebreak' },
-    headStyles: { fillColor: [30, 64, 175], textColor: 255, fontStyle: 'bold', fontSize: 8 },
+    styles: { fontSize: 7, cellPadding: 2, overflow: 'linebreak' },
+    headStyles: { fillColor: [30, 64, 175], textColor: 255, fontStyle: 'bold', fontSize: 7.5, halign: 'center' },
     columnStyles: {
-      0: { cellWidth: 24, font: 'courier' },
-      1: { cellWidth: 65 },
-      2: { cellWidth: 26, halign: 'center' },
-      3: { cellWidth: 20, halign: 'right' },
-      4: { cellWidth: 20, halign: 'right' },
-      5: { cellWidth: 26, halign: 'right' },
-      6: { cellWidth: 26, halign: 'right' },
+      0: { cellWidth: 26, font: 'courier', fontSize: 6.5 },
+      1: { cellWidth: 60 },
+      2: { cellWidth: 24, halign: 'center', fontStyle: 'bold' },
+      3: { cellWidth: 18, halign: 'right' },
+      4: { cellWidth: 18, halign: 'right' },
+      5: { cellWidth: 24, halign: 'right' },
+      6: { cellWidth: 24, halign: 'right' },
       7: { cellWidth: 26, halign: 'right', fontStyle: 'bold' },
-      8: { cellWidth: 26, halign: 'right' },
+      8: { cellWidth: 22, halign: 'right' },
+      9: { cellWidth: 26, halign: 'right', fontStyle: 'bold' },
     },
     alternateRowStyles: { fillColor: [245, 247, 250] },
     didParseCell(data) {
@@ -161,8 +181,9 @@ export async function generarInformePDF(resultado: ResultadoComparacion, empresa
         else if (tipo === 'PRESENTACIÓN') data.cell.styles.textColor = [109, 40, 217]
         else if (tipo === 'NO ENCONTRADO') data.cell.styles.textColor = [220, 38, 38]
       }
-      if (data.section === 'body' && data.column.index === 7) {
-        const val = parseFloat(String(data.cell.raw).replace(/[$.,\s]/g, '').replace(',', '.'))
+      if (data.section === 'body' && (data.column.index === 7 || data.column.index === 9)) {
+        const raw = String(data.cell.raw).replace(/[$.,\s]/g, '')
+        const val = parseFloat(raw)
         if (val > 0) data.cell.styles.textColor = [185, 28, 28]
         else if (val < 0) data.cell.styles.textColor = [21, 128, 61]
       }
@@ -171,29 +192,28 @@ export async function generarInformePDF(resultado: ResultadoComparacion, empresa
   })
 
   // ── TOTALES ─────────────────────────────────────────────────────────────────
-  const finalY = (doc as any).lastAutoTable.finalY + 8
+  const finalY = (doc as any).lastAutoTable.finalY + 6
 
-  // Caja de totales
-  const totalGeneral = totalDifCantidad + totalDifPrecio + totalDifPresentacion + totalDifNoEncontrado
-  const ivaTotal = Math.abs(totalGeneral) * 0.19
+  const totalDif = totalDifCantidad + totalDifPrecio + totalDifPresentacion + totalDifNoEncontrado
+  const totalIva = ivasDifCantidad + ivasDifPrecio + ivasDifPresentacion + ivasDifNoEncontrado
 
   autoTable(doc, {
     startY: finalY,
-    head: [['CONCEPTO', 'VALOR DIFERENCIA', 'IVA ESTIMADO (19%)', 'TOTAL CON IVA']],
+    head: [['CONCEPTO', 'VALOR DIFERENCIA MERCANCÍA', 'IVA FACTURADO', 'TOTAL (MERCANCÍA + IVA)']],
     body: [
-      ['Diferencias por Cantidad', `$${fmt(totalDifCantidad)}`, `$${fmt(Math.abs(totalDifCantidad) * 0.19)}`, `$${fmt(totalDifCantidad + Math.abs(totalDifCantidad) * 0.19)}`],
-      ['Diferencias por Precio', `$${fmt(totalDifPrecio)}`, `$${fmt(Math.abs(totalDifPrecio) * 0.19)}`, `$${fmt(totalDifPrecio + Math.abs(totalDifPrecio) * 0.19)}`],
-      ['Diferencias por Presentación', `$${fmt(totalDifPresentacion)}`, `$${fmt(Math.abs(totalDifPresentacion) * 0.19)}`, `$${fmt(totalDifPresentacion + Math.abs(totalDifPresentacion) * 0.19)}`],
-      ['Productos No Encontrados', `$${fmt(totalDifNoEncontrado)}`, `$${fmt(Math.abs(totalDifNoEncontrado) * 0.19)}`, `$${fmt(totalDifNoEncontrado + Math.abs(totalDifNoEncontrado) * 0.19)}`],
-      ['TOTAL GENERAL', `$${fmt(totalGeneral)}`, `$${fmt(ivaTotal)}`, `$${fmt(totalGeneral + ivaTotal)}`],
+      ['Diferencias por Cantidad',    `$${fmt(totalDifCantidad)}`,     `$${fmt(ivasDifCantidad)}`,     `$${fmt(totalDifCantidad + ivasDifCantidad)}`],
+      ['Diferencias por Precio',      `$${fmt(totalDifPrecio)}`,       `$${fmt(ivasDifPrecio)}`,       `$${fmt(totalDifPrecio + ivasDifPrecio)}`],
+      ['Diferencias por Presentación',`$${fmt(totalDifPresentacion)}`, `$${fmt(ivasDifPresentacion)}`, `$${fmt(totalDifPresentacion + ivasDifPresentacion)}`],
+      ['Productos No Encontrados',    `$${fmt(totalDifNoEncontrado)}`, `$${fmt(ivasDifNoEncontrado)}`, `$${fmt(totalDifNoEncontrado + ivasDifNoEncontrado)}`],
+      ['TOTAL GENERAL',               `$${fmt(totalDif)}`,            `$${fmt(totalIva)}`,            `$${fmt(totalDif + totalIva)}`],
     ],
     styles: { fontSize: 8.5, cellPadding: 3, halign: 'right' },
     headStyles: { fillColor: [15, 23, 42], textColor: 255, fontStyle: 'bold' },
     columnStyles: {
       0: { halign: 'left', fontStyle: 'bold', cellWidth: 80 },
-      1: { cellWidth: 50 },
+      1: { cellWidth: 60 },
       2: { cellWidth: 50 },
-      3: { cellWidth: 50 },
+      3: { cellWidth: 60 },
     },
     bodyStyles: { fillColor: [248, 250, 252] },
     didParseCell(data) {
@@ -201,32 +221,24 @@ export async function generarInformePDF(resultado: ResultadoComparacion, empresa
         data.cell.styles.fillColor = [30, 64, 175]
         data.cell.styles.textColor = [255, 255, 255]
         data.cell.styles.fontStyle = 'bold'
+        data.cell.styles.fontSize = 9
       }
     },
     margin: { left: 10, right: 10 },
   })
 
-  // ── PIE DE PÁGINA ────────────────────────────────────────────────────────────
+  // ── PIE ──────────────────────────────────────────────────────────────────────
   const pages = doc.getNumberOfPages()
   for (let i = 1; i <= pages; i++) {
     doc.setPage(i)
-    doc.setFontSize(7.5)
-    doc.setTextColor(120, 120, 120)
+    doc.setFontSize(7)
+    doc.setTextColor(130, 130, 130)
     doc.setFont('helvetica', 'normal')
-    doc.text(
-      `${empresa} — Informe de Diferencias — Factura ${resultado.numeroFactura}`,
-      14,
-      doc.internal.pageSize.getHeight() - 6
-    )
-    doc.text(
-      `Página ${i} de ${pages}`,
-      pageW - 14,
-      doc.internal.pageSize.getHeight() - 6,
-      { align: 'right' }
-    )
+    const ph = doc.internal.pageSize.getHeight()
+    doc.text(`SUPERMERCADOS PACARDYL — INVERSIONES LOGROS S.A. — Factura ${resultado.numeroFactura} — Recibo ${resultado.numeroRecibo}`, 14, ph - 5)
+    doc.text(`Página ${i} de ${pages}`, pageW - 14, ph - 5, { align: 'right' })
   }
 
-  // ── DESCARGAR ────────────────────────────────────────────────────────────────
-  const nombreArchivo = `Diferencias_${empresa.replace(/\s+/g, '_')}_${resultado.numeroFactura}_${new Date().toISOString().slice(0, 10)}.pdf`
+  const nombreArchivo = `Diferencias_PACARDYL_${resultado.numeroFactura.slice(-4)}_${new Date().toISOString().slice(0, 10)}.pdf`
   doc.save(nombreArchivo)
 }
