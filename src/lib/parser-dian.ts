@@ -20,7 +20,27 @@ function getNum(obj: any, ...paths: string[][]): number {
 }
 
 export async function parsearFacturaDIAN(xmlString: string): Promise<Omit<Factura, 'id' | 'creadoEn' | 'estado'>> {
-  const parsed = await parseStringPromise(xmlString, { explicitArray: true, ignoreAttrs: false })
+  let xmlToParse = xmlString
+
+  // Formato DIAN Colombia: AttachedDocument contiene la factura real en CDATA
+  const parsed0 = await parseStringPromise(xmlString, { explicitArray: true, ignoreAttrs: false })
+  const rootKey = Object.keys(parsed0)[0]
+
+  if (rootKey === 'AttachedDocument' || rootKey?.includes('AttachedDocument')) {
+    const doc = parsed0[rootKey]
+    // La factura está en cac:Attachment > cac:ExternalReference > cbc:Description (CDATA)
+    const attachment = doc['cac:Attachment']?.[0] || doc['Attachment']?.[0]
+    const extRef = attachment?.['cac:ExternalReference']?.[0] || attachment?.['ExternalReference']?.[0]
+    const desc = extRef?.['cbc:Description']?.[0] || extRef?.['Description']?.[0]
+    const cdataXml = typeof desc === 'string' ? desc : desc?._ || ''
+    if (cdataXml && cdataXml.includes('<Invoice')) {
+      xmlToParse = cdataXml
+    } else if (cdataXml && cdataXml.includes('<?xml')) {
+      xmlToParse = cdataXml
+    }
+  }
+
+  const parsed = await parseStringPromise(xmlToParse, { explicitArray: true, ignoreAttrs: false })
 
   const root =
     parsed['Invoice'] ||
