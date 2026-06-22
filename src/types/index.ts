@@ -27,6 +27,7 @@ export interface ProductoFactura {
   subtotal: number
   impuesto: number
   total: number
+  tasaIva?: number
 }
 
 export interface Factura {

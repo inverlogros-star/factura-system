@@ -1,147 +1,219 @@
 import { parseStringPromise } from 'xml2js'
 import type { ReciboMercancia, Factura, ProductoFactura, ProductoRecibo } from '@/types'
 
-function getText(obj: any, ...paths: string[][]): string {
-  for (const path of paths) {
-    let current = obj
-    for (const key of path) {
-      if (!current) break
-      current = Array.isArray(current[key]) ? current[key][0] : current[key]
-    }
-    if (current && typeof current === 'string') return current.trim()
-    if (current && current._) return current._.trim()
-  }
-  return ''
+// Obtiene el texto de un nodo xml2js (maneja string directo o {_: ...})
+function t(node: any): string {
+  if (!node) return ''
+  if (typeof node === 'string') return node.trim()
+  if (Array.isArray(node)) return t(node[0])
+  if (node._) return String(node._).trim()
+  const vals = Object.values(node).filter(v => typeof v === 'string' || (typeof v === 'object' && (v as any)._))
+  return vals.length ? t(vals[0]) : ''
 }
 
-function getNum(obj: any, ...paths: string[][]): number {
-  const val = getText(obj, ...paths)
-  return val ? parseFloat(val) || 0 : 0
+function n(node: any): number {
+  return parseFloat(t(node).replace(/,/g, '')) || 0
+}
+
+// Busca un nodo con prefijo o sin él
+function get(obj: any, ...keys: string[]): any {
+  if (!obj) return undefined
+  for (const key of keys) {
+    const variants = [key, `cbc:${key}`, `cac:${key}`, `fe:${key}`, `sts:${key}`]
+    for (const v of variants) {
+      if (obj[v] !== undefined) {
+        const val = obj[v]
+        return Array.isArray(val) ? val[0] : val
+      }
+    }
+  }
+  return undefined
+}
+
+function getArr(obj: any, ...keys: string[]): any[] {
+  if (!obj) return []
+  for (const key of keys) {
+    const variants = [key, `cbc:${key}`, `cac:${key}`, `fe:${key}`]
+    for (const v of variants) {
+      if (obj[v] !== undefined) {
+        const val = obj[v]
+        return Array.isArray(val) ? val : [val]
+      }
+    }
+  }
+  return []
+}
+
+async function parseXML(xmlStr: string) {
+  return parseStringPromise(xmlStr, {
+    explicitArray: true,
+    ignoreAttrs: false,
+    trim: true,
+    explicitCharkey: true,
+    charkey: '_',
+  })
+}
+
+// Extrae la factura Invoice del AttachedDocument DIAN si aplica
+async function extraerInvoice(xmlString: string): Promise<any> {
+  const parsed = await parseXML(xmlString)
+  const rootKey = Object.keys(parsed)[0]
+
+  if (rootKey?.includes('AttachedDocument') || rootKey === 'AttachedDocument') {
+    const doc = parsed[rootKey]
+    const attachment = get(doc, 'Attachment') || get(doc, 'cac:Attachment')
+    const extRef = get(attachment, 'ExternalReference') || get(attachment, 'cac:ExternalReference')
+    const descNode = get(extRef, 'Description') || get(extRef, 'cbc:Description')
+    const cdataContent = t(descNode)
+
+    if (cdataContent && (cdataContent.includes('<Invoice') || cdataContent.includes('<fe:Invoice'))) {
+      const innerParsed = await parseXML(cdataContent)
+      const innerKey = Object.keys(innerParsed)[0]
+      return innerParsed[innerKey]
+    }
+  }
+
+  // Es directamente un Invoice
+  return parsed[rootKey]
+}
+
+function extraerProveedor(root: any): { proveedor: string; nitProveedor: string } {
+  const supplierParty = get(root, 'AccountingSupplierParty', 'SellerSupplierParty')
+  const party = get(supplierParty, 'Party')
+
+  // Nombre
+  const partyName = get(party, 'PartyName')
+  const legalEntity = get(party, 'PartyLegalEntity')
+  const taxScheme = get(party, 'PartyTaxScheme')
+
+  const proveedor =
+    t(get(partyName, 'Name')) ||
+    t(get(legalEntity, 'RegistrationName')) ||
+    t(get(taxScheme, 'RegistrationName')) ||
+    ''
+
+  // NIT
+  const companyId =
+    get(taxScheme, 'CompanyID') ||
+    get(legalEntity, 'CompanyID') ||
+    get(party, 'PartyIdentification', 'ID')
+
+  const nitProveedor = t(companyId) || ''
+
+  return { proveedor, nitProveedor }
+}
+
+function extraerLineas(root: any): ProductoFactura[] {
+  const lineas = getArr(root, 'InvoiceLine', 'cac:InvoiceLine')
+  if (lineas.length === 0) return []
+
+  return lineas.map((line: any) => {
+    const item = get(line, 'Item', 'cac:Item') || {}
+    const price = get(line, 'Price', 'cac:Price') || {}
+
+    // Código del producto
+    const sellersId = get(get(item, 'SellersItemIdentification', 'cac:SellersItemIdentification'), 'ID', 'cbc:ID')
+    const standardId = get(get(item, 'StandardItemIdentification', 'cac:StandardItemIdentification'), 'ID', 'cbc:ID')
+    const buyersId = get(get(item, 'BuyersItemIdentification', 'cac:BuyersItemIdentification'), 'ID', 'cbc:ID')
+    const codigoItem = t(sellersId) || t(standardId) || t(buyersId) || t(get(line, 'ID', 'cbc:ID'))
+
+    // Descripción
+    const descripcion =
+      t(get(item, 'Description', 'cbc:Description')) ||
+      t(get(item, 'Name', 'cbc:Name')) ||
+      ''
+
+    // Cantidad
+    const cantNode = get(line, 'InvoicedQuantity', 'cbc:InvoicedQuantity')
+    const cantidad = n(cantNode) || 1
+
+    // Precio unitario
+    const precioUnitario = n(get(price, 'PriceAmount', 'cbc:PriceAmount'))
+
+    // Subtotal de la línea (sin IVA)
+    const subtotal = n(get(line, 'LineExtensionAmount', 'cbc:LineExtensionAmount'))
+
+    // Descuento
+    const allowances = getArr(line, 'AllowanceCharge', 'cac:AllowanceCharge')
+    let descuento = 0
+    for (const ac of allowances) {
+      const isCharge = t(get(ac, 'ChargeIndicator', 'cbc:ChargeIndicator'))
+      if (isCharge.toLowerCase() === 'false') {
+        descuento += n(get(ac, 'Amount', 'cbc:Amount'))
+      }
+    }
+
+    // IVA de la línea
+    const taxTotals = getArr(line, 'TaxTotal', 'cac:TaxTotal')
+    let impuesto = 0
+    let tasaIva = 0
+    for (const tt of taxTotals) {
+      impuesto += n(get(tt, 'TaxAmount', 'cbc:TaxAmount'))
+      const subtaxes = getArr(tt, 'TaxSubtotal', 'cac:TaxSubtotal')
+      for (const st of subtaxes) {
+        const tasa = n(get(st, 'Percent', 'cbc:Percent'))
+        if (tasa > 0) tasaIva = tasa
+      }
+    }
+
+    // Impoconsumo / otros impuestos
+    const withTotals = getArr(line, 'WithholdingTaxTotal', 'cac:WithholdingTaxTotal')
+    let otrosImp = 0
+    for (const wt of withTotals) {
+      otrosImp += n(get(wt, 'TaxAmount', 'cbc:TaxAmount'))
+    }
+
+    const total = subtotal + impuesto + otrosImp
+
+    return {
+      codigo: codigoItem,
+      descripcion,
+      cantidad,
+      precioUnitario: precioUnitario || (cantidad > 0 ? subtotal / cantidad : 0),
+      descuento,
+      subtotal,
+      impuesto: impuesto + otrosImp,
+      total,
+      tasaIva,
+    } as ProductoFactura & { tasaIva?: number }
+  })
 }
 
 export async function parsearFacturaDIAN(xmlString: string): Promise<Omit<Factura, 'id' | 'creadoEn' | 'estado'>> {
-  let xmlToParse = xmlString
-
-  // Formato DIAN Colombia: AttachedDocument contiene la factura real en CDATA
-  const parsed0 = await parseStringPromise(xmlString, { explicitArray: true, ignoreAttrs: false })
-  const rootKey = Object.keys(parsed0)[0]
-
-  if (rootKey === 'AttachedDocument' || rootKey?.includes('AttachedDocument')) {
-    const doc = parsed0[rootKey]
-    // La factura está en cac:Attachment > cac:ExternalReference > cbc:Description (CDATA)
-    const attachment = doc['cac:Attachment']?.[0] || doc['Attachment']?.[0]
-    const extRef = attachment?.['cac:ExternalReference']?.[0] || attachment?.['ExternalReference']?.[0]
-    const desc = extRef?.['cbc:Description']?.[0] || extRef?.['Description']?.[0]
-    const cdataXml = typeof desc === 'string' ? desc : desc?._ || ''
-    if (cdataXml && cdataXml.includes('<Invoice')) {
-      xmlToParse = cdataXml
-    } else if (cdataXml && cdataXml.includes('<?xml')) {
-      xmlToParse = cdataXml
-    }
-  }
-
-  const parsed = await parseStringPromise(xmlToParse, { explicitArray: true, ignoreAttrs: false })
-
-  const root =
-    parsed['Invoice'] ||
-    parsed['fe:Invoice'] ||
-    parsed['FacturaElectronica'] ||
-    Object.values(parsed)[0]
-
-  const cac = (key: string) => {
-    const variations = [`cac:${key}`, key, `fe:${key}`]
-    for (const v of variations) if (root[v]) return root[v][0]
-    return null
-  }
-
-  const cbc = (parent: any, key: string): string => {
-    if (!parent) return ''
-    const variations = [`cbc:${key}`, key, `fe:${key}`]
-    for (const v of variations) {
-      const val = parent[v]
-      if (val) {
-        const item = Array.isArray(val) ? val[0] : val
-        if (typeof item === 'string') return item.trim()
-        if (item && item._) return item._.trim()
-        if (item && typeof item === 'object') return String(Object.values(item)[0] || '').trim()
-      }
-    }
-    return ''
-  }
+  const root = await extraerInvoice(xmlString)
+  if (!root) throw new Error('No se pudo extraer la factura del XML')
 
   const numeroFactura =
-    cbc(root, 'ID') ||
-    cbc(root, 'InvoiceID') ||
-    getText(parsed, ['Invoice', 'ID'], ['fe:Invoice', 'fe:InvoiceID'])
+    t(get(root, 'ID', 'cbc:ID')) || ''
 
-  const fecha = cbc(root, 'IssueDate') || cbc(root, 'InvoiceDate')
-  const fechaVencimiento = cbc(root, 'DueDate') || undefined
+  const fecha = t(get(root, 'IssueDate', 'cbc:IssueDate')) || ''
+  const fechaVencimiento = t(get(root, 'DueDate', 'cbc:DueDate')) || undefined
 
-  const supplierParty = cac('AccountingSupplierParty') || cac('SellerSupplierParty')
-  const partyNode = supplierParty?.['cac:Party']?.[0] || supplierParty?.['Party']?.[0] || supplierParty
-  const partyName =
-    partyNode?.['cac:PartyName']?.[0]?.['cbc:Name']?.[0] ||
-    partyNode?.['PartyName']?.[0]?.['Name']?.[0] ||
-    partyNode?.['cac:PartyLegalEntity']?.[0]?.['cbc:RegistrationName']?.[0] ||
-    ''
-  const proveedor = typeof partyName === 'string' ? partyName : partyName?._ || ''
+  const { proveedor, nitProveedor } = extraerProveedor(root)
 
-  const taxScheme =
-    partyNode?.['cac:PartyTaxScheme']?.[0]?.['cbc:CompanyID']?.[0] ||
-    partyNode?.['PartyTaxScheme']?.[0]?.['CompanyID']?.[0] ||
-    ''
-  const nitProveedor = typeof taxScheme === 'string' ? taxScheme : taxScheme?._ || ''
+  // Totales
+  const monetary = get(root, 'LegalMonetaryTotal', 'cac:LegalMonetaryTotal')
+  const subtotal = n(get(monetary, 'LineExtensionAmount', 'cbc:LineExtensionAmount')) ||
+    n(get(monetary, 'TaxExclusiveAmount', 'cbc:TaxExclusiveAmount'))
+  const total = n(get(monetary, 'PayableAmount', 'cbc:PayableAmount')) ||
+    n(get(monetary, 'TaxInclusiveAmount', 'cbc:TaxInclusiveAmount'))
 
-  const legalMonetary = cac('LegalMonetaryTotal')
-  const subtotal = legalMonetary ? parseFloat(cbc(legalMonetary, 'LineExtensionAmount') || '0') : 0
-  const total = legalMonetary
-    ? parseFloat(cbc(legalMonetary, 'PayableAmount') || cbc(legalMonetary, 'TaxInclusiveAmount') || '0')
-    : 0
-
-  const taxTotals = root['cac:TaxTotal'] || root['TaxTotal'] || []
+  // IVA total
+  const taxTotals = getArr(root, 'TaxTotal', 'cac:TaxTotal')
   let impuestos = 0
   for (const tt of taxTotals) {
-    impuestos += parseFloat(cbc(tt, 'TaxAmount') || '0')
+    impuestos += n(get(tt, 'TaxAmount', 'cbc:TaxAmount'))
   }
 
-  const lineNodes = root['cac:InvoiceLine'] || root['InvoiceLine'] || []
-  const productos: ProductoFactura[] = lineNodes.map((line: any) => {
-    const item = line['cac:Item']?.[0] || line['Item']?.[0] || {}
-    const price = line['cac:Price']?.[0] || line['Price']?.[0] || {}
-    const sellersId =
-      item['cac:SellersItemIdentification']?.[0]?.['cbc:ID']?.[0] ||
-      item['SellersItemIdentification']?.[0]?.['ID']?.[0] ||
-      ''
-    const codigo = typeof sellersId === 'string' ? sellersId : sellersId?._ || cbc(line, 'ID')
-    const descripcion = cbc(item, 'Description') || cbc(item, 'Name')
-    const cantidad = parseFloat(cbc(line, 'InvoicedQuantity') || '1')
-    const precioUnitario = parseFloat(cbc(price, 'PriceAmount') || '0')
-    const subtotalLinea = parseFloat(cbc(line, 'LineExtensionAmount') || '0')
-    const lineTax = line['cac:TaxTotal']?.[0] || line['TaxTotal']?.[0]
-    const impuestoLinea = lineTax ? parseFloat(cbc(lineTax, 'TaxAmount') || '0') : 0
-    const descuento = parseFloat(
-      line['cac:AllowanceCharge']?.[0]?.['cbc:Amount']?.[0]?._ ||
-      line['cac:AllowanceCharge']?.[0]?.['cbc:Amount']?.[0] ||
-      '0'
-    )
-    return {
-      codigo,
-      descripcion: typeof descripcion === 'string' ? descripcion : '',
-      cantidad,
-      precioUnitario,
-      descuento,
-      subtotal: subtotalLinea,
-      impuesto: impuestoLinea,
-      total: subtotalLinea + impuestoLinea,
-    }
-  })
+  // Productos
+  const productos = extraerLineas(root)
 
   return {
     numeroFactura,
     proveedor,
     nitProveedor,
     fecha,
-    fechaVencimiento,
+    fechaVencimiento: fechaVencimiento || undefined,
     productos,
     subtotal,
     impuestos,
@@ -151,16 +223,16 @@ export async function parsearFacturaDIAN(xmlString: string): Promise<Omit<Factur
 }
 
 export async function parsearReciboXML(xmlString: string): Promise<Omit<ReciboMercancia, 'id' | 'creadoEn'>> {
-  const parsed = await parseStringPromise(xmlString, { explicitArray: true, ignoreAttrs: false })
+  const parsed = await parseXML(xmlString)
   const root = parsed['RecepcionMercancia'] || parsed['Recibo'] || parsed['GoodsReceipt'] || Object.values(parsed)[0] as any
 
   const cbc = (parent: any, key: string): string => {
     if (!parent) return ''
-    const val = parent[key]
+    const val = parent[key] || parent[`cbc:${key}`]
     if (!val) return ''
     const item = Array.isArray(val) ? val[0] : val
     if (typeof item === 'string') return item.trim()
-    if (item?._) return item._.trim()
+    if (item?._) return String(item._).trim()
     return ''
   }
 
@@ -172,8 +244,7 @@ export async function parsearReciboXML(xmlString: string): Promise<Omit<ReciboMe
   const lineNodes =
     root['Productos']?.[0]?.['Producto'] ||
     root['Items']?.[0]?.['Item'] ||
-    root['Lineas']?.[0]?.['Linea'] ||
-    []
+    root['Lineas']?.[0]?.['Linea'] || []
 
   const productos: ProductoRecibo[] = lineNodes.map((line: any) => {
     const codigo = cbc(line, 'Codigo') || cbc(line, 'CodigoProducto') || cbc(line, 'ID')
@@ -185,6 +256,5 @@ export async function parsearReciboXML(xmlString: string): Promise<Omit<ReciboMe
   })
 
   const total = productos.reduce((s, p) => s + p.subtotal, 0)
-
   return { numeroRecibo, proveedor, nitProveedor, fecha, productos, total, xmlRaw: xmlString }
 }
