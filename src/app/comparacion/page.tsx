@@ -263,7 +263,7 @@ export default function ComparacionPage() {
                         : <Square size={18} className="text-gray-400" />}
                     </button>
                   </th>
-                  {['No. Factura', 'Últ. 4 dígitos', 'Proveedor', 'Fecha', 'Total', 'Estado', 'Recibo detectado'].map(h => (
+                  {['No. Factura', 'Últ. 4 dígitos', 'Proveedor', 'Fecha', 'Total Factura', 'Estado', 'Recibo detectado', 'Total Recibo'].map(h => (
                     <th key={h} className="text-left px-3 py-3 font-medium text-gray-600">{h}</th>
                   ))}
                 </tr>
@@ -301,6 +301,11 @@ export default function ComparacionPage() {
                         {recibo
                           ? <span className="text-green-700 font-medium">✓ {recibo.numeroRecibo}</span>
                           : <span className="text-red-500">Sin recibo</span>}
+                      </td>
+                      <td className="px-3 py-3 font-medium">
+                        {recibo
+                          ? <span className="text-green-700">${Number(recibo.total).toLocaleString('es-CO')}</span>
+                          : <span className="text-gray-300">—</span>}
                       </td>
                     </tr>
                   )
