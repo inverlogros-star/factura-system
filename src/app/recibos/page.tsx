@@ -1,9 +1,8 @@
 'use client'
 import { useEffect, useRef, useState } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { Upload, Trash2, PackageCheck, Eye, FileSpreadsheet, FileText, FileCode } from 'lucide-react'
+import { Upload, Trash2, PackageCheck, Eye, FileSpreadsheet, FileText, FileCode, Bug } from 'lucide-react'
 import { parsearReciboXML } from '@/lib/parser-dian'
 import { parsearReciboExcel } from '@/lib/parser-recibo-excel'
 import { parsearReciboPDF } from '@/lib/parser-recibo-pdf'
@@ -14,17 +13,13 @@ import DetalleRecibo from '@/components/DetalleRecibo'
 
 const FORMATOS_ACEPTADOS = '.xml,.xlsx,.xls,.pdf'
 
-function iconoArchivo(nombre: string) {
-  if (nombre.endsWith('.xml')) return <FileCode size={14} className="text-blue-500" />
-  if (nombre.endsWith('.pdf')) return <FileText size={14} className="text-red-500" />
-  return <FileSpreadsheet size={14} className="text-green-500" />
-}
-
 export default function RecibosPage() {
   const [recibos, setRecibos] = useState<ReciboMercancia[]>([])
   const [cargando, setCargando] = useState(false)
   const [seleccionado, setSeleccionado] = useState<ReciboMercancia | null>(null)
+  const [debugTexto, setDebugTexto] = useState<string | null>(null)
   const inputRef = useRef<HTMLInputElement>(null)
+  const debugRef = useRef<HTMLInputElement>(null)
 
   const recargar = async () => setRecibos(await storeRecibos.getAll())
   useEffect(() => { recargar() }, [])
@@ -33,44 +28,44 @@ export default function RecibosPage() {
     if (!files || files.length === 0) return
     setCargando(true)
     let importados = 0
-    let errores = 0
 
     for (const file of Array.from(files)) {
       const nombre = file.name.toLowerCase()
       try {
         let datos: Omit<ReciboMercancia, 'id' | 'creadoEn'>
-
         if (nombre.endsWith('.xml')) {
-          const text = await file.text()
-          datos = await parsearReciboXML(text)
+          datos = await parsearReciboXML(await file.text())
         } else if (nombre.endsWith('.xlsx') || nombre.endsWith('.xls')) {
-          const buffer = await file.arrayBuffer()
-          datos = await parsearReciboExcel(buffer, file.name)
+          datos = await parsearReciboExcel(await file.arrayBuffer(), file.name)
         } else if (nombre.endsWith('.pdf')) {
-          const buffer = await file.arrayBuffer()
-          datos = await parsearReciboPDF(buffer, file.name)
+          datos = await parsearReciboPDF(await file.arrayBuffer(), file.name)
         } else {
-          toast.error(`Formato no soportado: ${file.name}`)
-          continue
+          toast.error(`Formato no soportado: ${file.name}`); continue
         }
-
-        const recibo: ReciboMercancia = {
+        await storeRecibos.save({
           id: `r-${Date.now()}-${Math.random().toString(36).slice(2)}`,
           ...datos,
           creadoEn: new Date().toISOString(),
-        }
-        await storeRecibos.save(recibo)
+        })
         importados++
       } catch (err) {
         toast.error(`Error en ${file.name}: ${(err as Error).message}`)
-        errores++
       }
     }
-
     await recargar()
     setCargando(false)
-    if (importados > 0) toast.success(`${importados} recibo(s) importado(s) correctamente`)
-    if (errores > 0) toast.warning(`${errores} archivo(s) con error`)
+    if (importados > 0) toast.success(`${importados} recibo(s) importado(s)`)
+  }
+
+  async function handleDebug(files: FileList | null) {
+    if (!files || files.length === 0) return
+    const file = files[0]
+    const fd = new FormData()
+    fd.append('file', file)
+    const res = await fetch('/api/recibos/debug-pdf', { method: 'POST', body: fd })
+    const data = await res.json()
+    if (data.error) { toast.error(data.error); return }
+    setDebugTexto(data.texto)
   }
 
   async function eliminar(id: string) {
@@ -86,48 +81,62 @@ export default function RecibosPage() {
           <h1 className="text-2xl font-bold text-gray-900">Recibos de Mercancía</h1>
           <p className="text-gray-500 text-sm mt-1">Carga recibos en formato XML, Excel o PDF</p>
         </div>
-        <Button onClick={() => inputRef.current?.click()} disabled={cargando}>
-          <Upload size={16} className="mr-2" />
-          {cargando ? 'Importando...' : 'Subir archivo'}
-        </Button>
-        <input
-          ref={inputRef}
-          type="file"
-          accept={FORMATOS_ACEPTADOS}
-          multiple
-          className="hidden"
-          onChange={e => handleArchivos(e.target.files)}
-        />
+        <div className="flex gap-2">
+          <Button onClick={() => inputRef.current?.click()} disabled={cargando}>
+            <Upload size={16} className="mr-2" />
+            {cargando ? 'Importando...' : 'Subir archivo'}
+          </Button>
+          <Button variant="outline" onClick={() => debugRef.current?.click()} title="Ver texto extraído del PDF">
+            <Bug size={16} className="mr-2" /> Diagnóstico PDF
+          </Button>
+        </div>
+        <input ref={inputRef} type="file" accept={FORMATOS_ACEPTADOS} multiple className="hidden"
+          onChange={e => handleArchivos(e.target.files)} />
+        <input ref={debugRef} type="file" accept=".pdf" className="hidden"
+          onChange={e => handleDebug(e.target.files)} />
       </div>
 
-      {/* Formatos aceptados */}
-      <div className="flex gap-3">
+      {/* Formatos */}
+      <div className="flex gap-3 flex-wrap">
         {[
-          { icon: <FileCode size={14} className="text-blue-500" />, label: 'XML', desc: 'Recibo electrónico' },
-          { icon: <FileSpreadsheet size={14} className="text-green-500" />, label: 'Excel (.xlsx / .xls)', desc: 'Hoja de cálculo' },
-          { icon: <FileText size={14} className="text-red-500" />, label: 'PDF', desc: 'Documento PDF' },
-        ].map(({ icon, label, desc }) => (
-          <div key={label} className="flex items-center gap-2 px-3 py-2 rounded-lg border bg-white text-xs text-gray-600">
-            {icon}
-            <span className="font-medium">{label}</span>
-            <span className="text-gray-400">— {desc}</span>
+          { icon: <FileCode size={14} className="text-blue-500" />, label: 'XML' },
+          { icon: <FileSpreadsheet size={14} className="text-green-500" />, label: 'Excel (.xlsx / .xls)' },
+          { icon: <FileText size={14} className="text-red-500" />, label: 'PDF digital' },
+        ].map(({ icon, label }) => (
+          <div key={label} className="flex items-center gap-2 px-3 py-1.5 rounded-lg border bg-white text-xs text-gray-600">
+            {icon} <span className="font-medium">{label}</span>
           </div>
         ))}
       </div>
+
+      {/* Panel diagnóstico */}
+      {debugTexto && (
+        <Card className="border-orange-200">
+          <CardHeader className="pb-2">
+            <div className="flex items-center justify-between">
+              <CardTitle className="text-sm text-orange-700">Texto extraído del PDF (diagnóstico)</CardTitle>
+              <Button size="sm" variant="ghost" onClick={() => setDebugTexto(null)}>✕</Button>
+            </div>
+          </CardHeader>
+          <CardContent>
+            <pre className="text-xs bg-gray-50 p-3 rounded border overflow-auto max-h-80 whitespace-pre-wrap font-mono">
+              {debugTexto}
+            </pre>
+          </CardContent>
+        </Card>
+      )}
 
       {recibos.length === 0 ? (
         <Card>
           <CardContent className="py-16 text-center">
             <PackageCheck size={48} className="mx-auto text-gray-300 mb-4" />
             <p className="text-gray-500">No hay recibos cargados.</p>
-            <p className="text-sm text-gray-400 mt-1">Sube archivos XML, Excel o PDF de recepción de mercancía.</p>
+            <p className="text-sm text-gray-400 mt-1">Sube archivos XML, Excel o PDF.</p>
           </CardContent>
         </Card>
       ) : (
         <Card>
-          <CardHeader>
-            <CardTitle className="text-base">{recibos.length} recibo(s)</CardTitle>
-          </CardHeader>
+          <CardHeader><CardTitle className="text-base">{recibos.length} recibo(s)</CardTitle></CardHeader>
           <CardContent className="p-0">
             <table className="w-full text-sm">
               <thead className="bg-gray-50 border-b">
@@ -159,7 +168,6 @@ export default function RecibosPage() {
           </CardContent>
         </Card>
       )}
-
       {seleccionado && <DetalleRecibo recibo={seleccionado} onClose={() => setSeleccionado(null)} />}
     </div>
   )
