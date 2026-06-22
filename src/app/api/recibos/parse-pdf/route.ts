@@ -1,6 +1,21 @@
 import { NextRequest, NextResponse } from 'next/server'
 import type { ProductoRecibo } from '@/types'
 
+// Polyfill requerido por pdf-parse en entornos serverless (Vercel)
+if (typeof globalThis.DOMMatrix === 'undefined') {
+  ;(globalThis as any).DOMMatrix = class {
+    constructor(_init?: string | number[]) {}
+    static fromMatrix() { return new (globalThis as any).DOMMatrix() }
+    static fromFloat32Array() { return new (globalThis as any).DOMMatrix() }
+    static fromFloat64Array() { return new (globalThis as any).DOMMatrix() }
+    invertSelf() { return this }
+    multiplySelf() { return this }
+    translateSelf() { return this }
+    scaleSelf() { return this }
+    rotateSelf() { return this }
+  }
+}
+
 function limpiarNum(str: string): number {
   return parseFloat(str.replace(/[$\s]/g, '').replace(/\./g, '').replace(',', '.')) || 0
 }
