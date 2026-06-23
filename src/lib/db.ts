@@ -21,8 +21,9 @@ export async function inicializarDB() {
     )
   `
 
-  // Migración: agregar columna correo_origen si no existe
+  // Migraciones de columnas nuevas
   await sql`ALTER TABLE facturas ADD COLUMN IF NOT EXISTS correo_origen TEXT`
+  await sql`ALTER TABLE facturas ADD COLUMN IF NOT EXISTS tipo_documento TEXT DEFAULT 'factura'`
 
   await sql`
     CREATE TABLE IF NOT EXISTS recibos (

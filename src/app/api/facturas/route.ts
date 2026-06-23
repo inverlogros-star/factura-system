@@ -20,6 +20,7 @@ export async function GET() {
       reciboAsociadoId: r.recibo_asociado_id,
       xmlRaw: r.xml_raw,
       correoOrigen: r.correo_origen,
+      tipoDocumento: r.tipo_documento || 'factura',
       creadoEn: r.creado_en,
     }))
     return NextResponse.json(facturas)
@@ -33,11 +34,12 @@ export async function POST(req: NextRequest) {
     const f: Factura = await req.json()
     await sql`
       INSERT INTO facturas (id, numero_factura, proveedor, nit_proveedor, fecha, fecha_vencimiento,
-        productos, subtotal, impuestos, total, estado, recibo_asociado_id, xml_raw, correo_origen, creado_en)
+        productos, subtotal, impuestos, total, estado, recibo_asociado_id, xml_raw,
+        correo_origen, tipo_documento, creado_en)
       VALUES (${f.id}, ${f.numeroFactura}, ${f.proveedor}, ${f.nitProveedor}, ${f.fecha},
         ${f.fechaVencimiento ?? null}, ${JSON.stringify(f.productos)}, ${f.subtotal},
         ${f.impuestos}, ${f.total}, ${f.estado}, ${f.reciboAsociadoId ?? null},
-        ${f.xmlRaw ?? null}, ${f.correoOrigen ?? null}, ${f.creadoEn})
+        ${f.xmlRaw ?? null}, ${f.correoOrigen ?? null}, ${f.tipoDocumento ?? 'factura'}, ${f.creadoEn})
       ON CONFLICT (id) DO UPDATE SET
         estado = EXCLUDED.estado,
         recibo_asociado_id = EXCLUDED.recibo_asociado_id,
@@ -49,7 +51,8 @@ export async function POST(req: NextRequest) {
         subtotal = EXCLUDED.subtotal,
         impuestos = EXCLUDED.impuestos,
         total = EXCLUDED.total,
-        correo_origen = EXCLUDED.correo_origen
+        correo_origen = EXCLUDED.correo_origen,
+        tipo_documento = EXCLUDED.tipo_documento
     `
     return NextResponse.json({ ok: true })
   } catch (err) {

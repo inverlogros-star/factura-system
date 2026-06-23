@@ -3,7 +3,7 @@ import { useEffect, useRef, useState } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { Upload, Trash2, FileText, Eye, CheckSquare, Square } from 'lucide-react'
+import { Upload, Trash2, FileText, Eye, CheckSquare, Square, Filter } from 'lucide-react'
 import { parsearFacturaDIAN } from '@/lib/parser-dian'
 import { storeFacturas } from '@/lib/store'
 import type { Factura } from '@/types'
@@ -19,11 +19,23 @@ const ESTADO_VARIANT: Record<Factura['estado'], 'default' | 'secondary' | 'destr
   con_diferencias: 'destructive', rechazada: 'outline',
 }
 
+const TIPO_LABEL: Record<string, string> = {
+  factura: 'Factura', nota_credito: 'Nota Crédito',
+  nota_debito: 'Nota Débito', otro: 'Otro doc.',
+}
+const TIPO_COLOR: Record<string, string> = {
+  factura: 'bg-blue-100 text-blue-800',
+  nota_credito: 'bg-orange-100 text-orange-800',
+  nota_debito: 'bg-purple-100 text-purple-800',
+  otro: 'bg-gray-100 text-gray-600',
+}
+
 export default function FacturasPage() {
   const [facturas, setFacturas] = useState<Factura[]>([])
   const [cargando, setCargando] = useState(false)
   const [seleccionada, setSeleccionada] = useState<Factura | null>(null)
   const [marcadas, setMarcadas] = useState<Set<string>>(new Set())
+  const [filtroTipo, setFiltroTipo] = useState<string>('todos')
   const inputRef = useRef<HTMLInputElement>(null)
 
   const recargar = async () => { setFacturas(await storeFacturas.getAll()); setMarcadas(new Set()) }
@@ -62,7 +74,14 @@ export default function FacturasPage() {
     await recargar()
   }
 
-  const todasMarcadas = facturas.length > 0 && marcadas.size === facturas.length
+  const facturasFiltradas = filtroTipo === 'todos' ? facturas : facturas.filter(f => (f.tipoDocumento || 'factura') === filtroTipo)
+  const todasMarcadas = facturasFiltradas.length > 0 && facturasFiltradas.every(f => marcadas.has(f.id))
+
+  const conteos = facturas.reduce((acc, f) => {
+    const t = f.tipoDocumento || 'factura'
+    acc[t] = (acc[t] || 0) + 1
+    return acc
+  }, {} as Record<string, number>)
 
   return (
     <div className="space-y-6">
@@ -87,7 +106,18 @@ export default function FacturasPage() {
           onChange={e => handleArchivos(e.target.files)} />
       </div>
 
-      {facturas.length === 0 ? (
+      {/* Filtros por tipo */}
+      <div className="flex gap-2 flex-wrap">
+        {[['todos', 'Todos', facturas.length], ...Object.entries(conteos).map(([k, v]) => [k, TIPO_LABEL[k] || k, v])].map(([tipo, label, count]) => (
+          <button key={tipo as string}
+            onClick={() => setFiltroTipo(tipo as string)}
+            className={`px-3 py-1.5 rounded-full text-xs font-medium border transition-colors ${filtroTipo === tipo ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-gray-600 border-gray-300 hover:border-blue-400'}`}>
+            {label as string} ({count as number})
+          </button>
+        ))}
+      </div>
+
+      {facturasFiltradas.length === 0 ? (
         <Card>
           <CardContent className="py-16 text-center">
             <FileText size={48} className="mx-auto text-gray-300 mb-4" />
@@ -97,8 +127,8 @@ export default function FacturasPage() {
       ) : (
         <Card>
           <CardHeader>
-            <CardTitle className="text-base">{facturas.length} factura(s)
-              {marcadas.size > 0 && <span className="ml-2 text-sm font-normal text-blue-600">— {marcadas.size} seleccionada(s)</span>}
+            <CardTitle className="text-base">{facturasFiltradas.length} documento(s)
+              {marcadas.size > 0 && <span className="ml-2 text-sm font-normal text-blue-600">— {marcadas.size} seleccionado(s)</span>}
             </CardTitle>
           </CardHeader>
           <CardContent className="p-0">
@@ -110,13 +140,13 @@ export default function FacturasPage() {
                       {todasMarcadas ? <CheckSquare size={18} /> : <Square size={18} className="text-gray-400" />}
                     </button>
                   </th>
-                  {['No. Factura','Proveedor','NIT','Fecha','Total','Estado','Correo origen',''].map(h => (
+                  {['No. Documento','Tipo','Proveedor','NIT','Fecha','Total','Estado','Correo origen',''].map(h => (
                     <th key={h} className="text-left px-3 py-3 font-medium text-gray-600">{h}</th>
                   ))}
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
-                {facturas.map(f => (
+                {facturasFiltradas.map(f => (
                   <tr key={f.id} className={`transition-colors cursor-pointer ${marcadas.has(f.id) ? 'bg-blue-50' : 'hover:bg-gray-50'}`}
                     onClick={() => toggleMarca(f.id)}>
                     <td className="px-4 py-3" onClick={e => { e.stopPropagation(); toggleMarca(f.id) }}>
@@ -125,6 +155,11 @@ export default function FacturasPage() {
                         : <Square size={18} className="text-gray-300" />}
                     </td>
                     <td className="px-3 py-3 font-mono font-medium">{f.numeroFactura}</td>
+                    <td className="px-3 py-3">
+                      <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${TIPO_COLOR[f.tipoDocumento || 'factura']}`}>
+                        {TIPO_LABEL[f.tipoDocumento || 'factura']}
+                      </span>
+                    </td>
                     <td className="px-3 py-3">{f.proveedor || '—'}</td>
                     <td className="px-3 py-3 text-gray-500">{f.nitProveedor || '—'}</td>
                     <td className="px-3 py-3 text-gray-500">{f.fecha}</td>

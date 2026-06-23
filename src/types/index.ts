@@ -30,6 +30,8 @@ export interface ProductoFactura {
   tasaIva?: number
 }
 
+export type TipoDocumento = 'factura' | 'nota_credito' | 'nota_debito' | 'otro'
+
 export interface Factura {
   id: string
   numeroFactura: string
@@ -45,6 +47,7 @@ export interface Factura {
   reciboAsociadoId?: string
   xmlRaw?: string
   correoOrigen?: string
+  tipoDocumento?: TipoDocumento
   creadoEn: string
 }
 

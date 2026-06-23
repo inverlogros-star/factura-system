@@ -54,8 +54,18 @@ async function parseXML(xmlStr: string) {
   })
 }
 
-// Extrae la factura Invoice del AttachedDocument DIAN si aplica
-async function extraerInvoice(xmlString: string): Promise<any> {
+export type TipoDocumentoParsed = 'factura' | 'nota_credito' | 'nota_debito' | 'otro'
+
+function detectarTipo(rootKey: string): TipoDocumentoParsed {
+  const k = rootKey.toLowerCase()
+  if (k.includes('creditnote')) return 'nota_credito'
+  if (k.includes('debitnote')) return 'nota_debito'
+  if (k.includes('invoice')) return 'factura'
+  return 'otro'
+}
+
+// Extrae el documento interno del AttachedDocument DIAN
+async function extraerDocumento(xmlString: string): Promise<{ root: any; tipo: TipoDocumentoParsed }> {
   const parsed = await parseXML(xmlString)
   const rootKey = Object.keys(parsed)[0]
 
@@ -66,15 +76,14 @@ async function extraerInvoice(xmlString: string): Promise<any> {
     const descNode = get(extRef, 'Description') || get(extRef, 'cbc:Description')
     const cdataContent = t(descNode)
 
-    if (cdataContent && (cdataContent.includes('<Invoice') || cdataContent.includes('<fe:Invoice'))) {
+    if (cdataContent && cdataContent.includes('<?xml')) {
       const innerParsed = await parseXML(cdataContent)
       const innerKey = Object.keys(innerParsed)[0]
-      return innerParsed[innerKey]
+      return { root: innerParsed[innerKey], tipo: detectarTipo(innerKey) }
     }
   }
 
-  // Es directamente un Invoice
-  return parsed[rootKey]
+  return { root: parsed[rootKey], tipo: detectarTipo(rootKey) }
 }
 
 function extraerProveedor(root: any): { proveedor: string; nitProveedor: string } {
@@ -104,7 +113,10 @@ function extraerProveedor(root: any): { proveedor: string; nitProveedor: string 
 }
 
 function extraerLineas(root: any): ProductoFactura[] {
-  const lineas = getArr(root, 'InvoiceLine', 'cac:InvoiceLine')
+  // Invoice → InvoiceLine, CreditNote → CreditNoteLine, DebitNote → DebitNoteLine
+  const lineas = getArr(root, 'InvoiceLine', 'cac:InvoiceLine',
+    'CreditNoteLine', 'cac:CreditNoteLine',
+    'DebitNoteLine', 'cac:DebitNoteLine')
   if (lineas.length === 0) return []
 
   return lineas.map((line: any) => {
@@ -124,7 +136,9 @@ function extraerLineas(root: any): ProductoFactura[] {
       ''
 
     // Cantidad
-    const cantNode = get(line, 'InvoicedQuantity', 'cbc:InvoicedQuantity')
+    const cantNode = get(line, 'InvoicedQuantity', 'cbc:InvoicedQuantity',
+      'CreditedQuantity', 'cbc:CreditedQuantity',
+      'DebitedQuantity', 'cbc:DebitedQuantity')
     const cantidad = n(cantNode) || 1
 
     // Precio unitario
@@ -180,8 +194,8 @@ function extraerLineas(root: any): ProductoFactura[] {
 }
 
 export async function parsearFacturaDIAN(xmlString: string): Promise<Omit<Factura, 'id' | 'creadoEn' | 'estado'>> {
-  const root = await extraerInvoice(xmlString)
-  if (!root) throw new Error('No se pudo extraer la factura del XML')
+  const { root, tipo } = await extraerDocumento(xmlString)
+  if (!root) throw new Error('No se pudo extraer el documento del XML')
 
   const numeroFactura =
     t(get(root, 'ID', 'cbc:ID')) || ''
@@ -218,6 +232,7 @@ export async function parsearFacturaDIAN(xmlString: string): Promise<Omit<Factur
     subtotal,
     impuestos,
     total,
+    tipoDocumento: tipo,
     xmlRaw: xmlString,
   }
 }

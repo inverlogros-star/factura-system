@@ -53,11 +53,13 @@ export async function POST(req: NextRequest) {
 
     await sql`
       INSERT INTO facturas (id, numero_factura, proveedor, nit_proveedor, fecha, fecha_vencimiento,
-        productos, subtotal, impuestos, total, estado, recibo_asociado_id, xml_raw, correo_origen, creado_en)
+        productos, subtotal, impuestos, total, estado, recibo_asociado_id, xml_raw,
+        correo_origen, tipo_documento, creado_en)
       VALUES (${factura.id}, ${factura.numeroFactura}, ${factura.proveedor}, ${factura.nitProveedor},
         ${factura.fecha}, ${factura.fechaVencimiento ?? null}, ${JSON.stringify(factura.productos)},
         ${factura.subtotal}, ${factura.impuestos}, ${factura.total}, ${factura.estado},
-        ${null}, ${factura.xmlRaw ?? null}, ${factura.correoOrigen ?? null}, ${factura.creadoEn})
+        ${null}, ${factura.xmlRaw ?? null}, ${factura.correoOrigen ?? null},
+        ${factura.tipoDocumento ?? 'factura'}, ${factura.creadoEn})
     `
 
     return NextResponse.json({ ok: true, omitido: false, numeroFactura: factura.numeroFactura })
