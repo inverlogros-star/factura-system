@@ -4,9 +4,7 @@ import type { Factura } from '@/types'
 
 export async function GET() {
   try {
-    const { rows } = await sql`
-      SELECT * FROM facturas ORDER BY creado_en DESC
-    `
+    const { rows } = await sql`SELECT * FROM facturas ORDER BY creado_en DESC`
     const facturas: Factura[] = rows.map(r => ({
       id: r.id,
       numeroFactura: r.numero_factura,
@@ -21,6 +19,7 @@ export async function GET() {
       estado: r.estado,
       reciboAsociadoId: r.recibo_asociado_id,
       xmlRaw: r.xml_raw,
+      correoOrigen: r.correo_origen,
       creadoEn: r.creado_en,
     }))
     return NextResponse.json(facturas)
@@ -34,11 +33,11 @@ export async function POST(req: NextRequest) {
     const f: Factura = await req.json()
     await sql`
       INSERT INTO facturas (id, numero_factura, proveedor, nit_proveedor, fecha, fecha_vencimiento,
-        productos, subtotal, impuestos, total, estado, recibo_asociado_id, xml_raw, creado_en)
+        productos, subtotal, impuestos, total, estado, recibo_asociado_id, xml_raw, correo_origen, creado_en)
       VALUES (${f.id}, ${f.numeroFactura}, ${f.proveedor}, ${f.nitProveedor}, ${f.fecha},
         ${f.fechaVencimiento ?? null}, ${JSON.stringify(f.productos)}, ${f.subtotal},
         ${f.impuestos}, ${f.total}, ${f.estado}, ${f.reciboAsociadoId ?? null},
-        ${f.xmlRaw ?? null}, ${f.creadoEn})
+        ${f.xmlRaw ?? null}, ${f.correoOrigen ?? null}, ${f.creadoEn})
       ON CONFLICT (id) DO UPDATE SET
         estado = EXCLUDED.estado,
         recibo_asociado_id = EXCLUDED.recibo_asociado_id,
@@ -49,7 +48,8 @@ export async function POST(req: NextRequest) {
         productos = EXCLUDED.productos,
         subtotal = EXCLUDED.subtotal,
         impuestos = EXCLUDED.impuestos,
-        total = EXCLUDED.total
+        total = EXCLUDED.total,
+        correo_origen = EXCLUDED.correo_origen
     `
     return NextResponse.json({ ok: true })
   } catch (err) {

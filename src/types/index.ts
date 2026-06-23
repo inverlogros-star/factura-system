@@ -44,6 +44,7 @@ export interface Factura {
   estado: 'pendiente' | 'conciliada' | 'con_diferencias' | 'rechazada'
   reciboAsociadoId?: string
   xmlRaw?: string
+  correoOrigen?: string
   creadoEn: string
 }
 

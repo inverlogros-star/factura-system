@@ -5,7 +5,7 @@ import type { Factura } from '@/types'
 
 export async function POST(req: NextRequest) {
   try {
-    const { xmlContent, nombreArchivo, forzar } = await req.json()
+    const { xmlContent, nombreArchivo, forzar, correoOrigen } = await req.json()
     if (!xmlContent) return NextResponse.json({ error: 'Sin contenido XML' }, { status: 400 })
 
     const datos = await parsearFacturaDIAN(xmlContent)
@@ -35,7 +35,8 @@ export async function POST(req: NextRequest) {
           subtotal = ${datos.subtotal},
           impuestos = ${datos.impuestos},
           total = ${datos.total},
-          xml_raw = ${datos.xmlRaw ?? null}
+          xml_raw = ${datos.xmlRaw ?? null},
+          correo_origen = COALESCE(correo_origen, ${correoOrigen ?? null})
         WHERE numero_factura = ${datos.numeroFactura}
       `
       return NextResponse.json({ ok: true, omitido: false, actualizado: true, numeroFactura: datos.numeroFactura })
@@ -46,16 +47,17 @@ export async function POST(req: NextRequest) {
       id: `f-${Date.now()}-${Math.random().toString(36).slice(2)}`,
       ...datos,
       estado: 'pendiente',
+      correoOrigen: correoOrigen ?? null,
       creadoEn: new Date().toISOString(),
     }
 
     await sql`
       INSERT INTO facturas (id, numero_factura, proveedor, nit_proveedor, fecha, fecha_vencimiento,
-        productos, subtotal, impuestos, total, estado, recibo_asociado_id, xml_raw, creado_en)
+        productos, subtotal, impuestos, total, estado, recibo_asociado_id, xml_raw, correo_origen, creado_en)
       VALUES (${factura.id}, ${factura.numeroFactura}, ${factura.proveedor}, ${factura.nitProveedor},
         ${factura.fecha}, ${factura.fechaVencimiento ?? null}, ${JSON.stringify(factura.productos)},
         ${factura.subtotal}, ${factura.impuestos}, ${factura.total}, ${factura.estado},
-        ${null}, ${factura.xmlRaw ?? null}, ${factura.creadoEn})
+        ${null}, ${factura.xmlRaw ?? null}, ${factura.correoOrigen ?? null}, ${factura.creadoEn})
     `
 
     return NextResponse.json({ ok: true, omitido: false, numeroFactura: factura.numeroFactura })

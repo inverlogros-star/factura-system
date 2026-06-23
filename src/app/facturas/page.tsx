@@ -110,7 +110,7 @@ export default function FacturasPage() {
                       {todasMarcadas ? <CheckSquare size={18} /> : <Square size={18} className="text-gray-400" />}
                     </button>
                   </th>
-                  {['No. Factura','Proveedor','NIT','Fecha','Total','Estado',''].map(h => (
+                  {['No. Factura','Proveedor','NIT','Fecha','Total','Estado','Correo origen',''].map(h => (
                     <th key={h} className="text-left px-3 py-3 font-medium text-gray-600">{h}</th>
                   ))}
                 </tr>
@@ -131,6 +131,11 @@ export default function FacturasPage() {
                     <td className="px-3 py-3 font-medium">${Number(f.total).toLocaleString('es-CO')}</td>
                     <td className="px-3 py-3">
                       <Badge variant={ESTADO_VARIANT[f.estado]}>{ESTADO_LABELS[f.estado]}</Badge>
+                    </td>
+                    <td className="px-3 py-3 text-xs text-gray-500">
+                      {f.correoOrigen
+                        ? <span className="bg-gray-100 px-2 py-0.5 rounded-full">{f.correoOrigen}</span>
+                        : '—'}
                     </td>
                     <td className="px-3 py-3" onClick={e => e.stopPropagation()}>
                       <div className="flex gap-1">

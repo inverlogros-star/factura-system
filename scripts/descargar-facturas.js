@@ -58,10 +58,10 @@ function postJSON(url, body) {
   })
 }
 
-async function importarAWeb(xmlPath, nombreArchivo) {
+async function importarAWeb(xmlPath, nombreArchivo, correoOrigen) {
   try {
     const xmlContent = fs.readFileSync(xmlPath, 'utf8')
-    const res = await postJSON(`${APP_URL}/api/facturas/importar-xml`, { xmlContent, nombreArchivo })
+    const res = await postJSON(`${APP_URL}/api/facturas/importar-xml`, { xmlContent, nombreArchivo, correoOrigen })
     if (res.error) {
       log(`  ⚠️  No importado ${nombreArchivo}: ${res.error}`)
     } else if (res.omitido) {
@@ -116,7 +116,7 @@ async function guardarAdjunto(adjunto, descargados) {
     fs.writeFileSync(destino, adjunto.content)
     log(`  ✅ XML: ${nombre}`)
     descargados.count++
-    await importarAWeb(destino, nombre)
+    await importarAWeb(destino, nombre, cuenta.nombre)
   }
 
   if (n.endsWith('.zip') || ct.includes('zip')) {
@@ -132,7 +132,7 @@ async function guardarAdjunto(adjunto, descargados) {
           fs.writeFileSync(destino, e.getData())
           log(`  ✅ ZIP→XML: ${nombre}`)
           descargados.count++
-          await importarAWeb(destino, nombre)
+          await importarAWeb(destino, nombre, cuenta.nombre)
         }
       }
     } catch (e) { log(`  ⚠️  Error ZIP: ${e.message}`) }

@@ -16,9 +16,13 @@ export async function inicializarDB() {
       estado TEXT NOT NULL DEFAULT 'pendiente',
       recibo_asociado_id TEXT,
       xml_raw TEXT,
+      correo_origen TEXT,
       creado_en TIMESTAMPTZ NOT NULL DEFAULT NOW()
     )
   `
+
+  // Migración: agregar columna correo_origen si no existe
+  await sql`ALTER TABLE facturas ADD COLUMN IF NOT EXISTS correo_origen TEXT`
 
   await sql`
     CREATE TABLE IF NOT EXISTS recibos (
