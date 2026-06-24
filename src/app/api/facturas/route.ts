@@ -4,7 +4,11 @@ import type { Factura } from '@/types'
 
 export async function GET() {
   try {
-    const { rows } = await sql`SELECT * FROM facturas ORDER BY creado_en DESC`
+    const { rows } = await sql`
+      SELECT id, numero_factura, proveedor, nit_proveedor, fecha, fecha_vencimiento,
+             productos, subtotal, impuestos, total, estado, recibo_asociado_id,
+             correo_origen, tipo_documento, creado_en
+      FROM facturas ORDER BY creado_en DESC`
     const facturas: Factura[] = rows.map(r => ({
       id: r.id,
       numeroFactura: r.numero_factura,

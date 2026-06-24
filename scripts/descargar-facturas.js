@@ -100,7 +100,7 @@ function tieneFactura(bodyStructure) {
     str.includes('text/xml') || str.includes('application/octet-stream')
 }
 
-async function guardarAdjunto(adjunto, descargados) {
+async function guardarAdjunto(adjunto, descargados, cuentaNombre) {
   const n = (adjunto.filename || '').toLowerCase()
   const ct = (adjunto.contentType || '').toLowerCase()
   const esXml = n.endsWith('.xml') || ct.includes('xml') ||
@@ -116,7 +116,7 @@ async function guardarAdjunto(adjunto, descargados) {
     fs.writeFileSync(destino, adjunto.content)
     log(`  ✅ XML: ${nombre}`)
     descargados.count++
-    await importarAWeb(destino, nombre, cuenta.nombre)
+    await importarAWeb(destino, nombre, cuentaNombre)
   }
 
   if (n.endsWith('.zip') || ct.includes('zip')) {
@@ -132,7 +132,7 @@ async function guardarAdjunto(adjunto, descargados) {
           fs.writeFileSync(destino, e.getData())
           log(`  ✅ ZIP→XML: ${nombre}`)
           descargados.count++
-          await importarAWeb(destino, nombre, cuenta.nombre)
+          await importarAWeb(destino, nombre, cuentaNombre)
         }
       }
     } catch (e) { log(`  ⚠️  Error ZIP: ${e.message}`) }
@@ -149,7 +149,7 @@ async function descargarMensaje(cuenta, uid) {
     for await (const msg of client.fetch([uid], { source: true, uid: true }, { uid: true })) {
       const parsed = await simpleParser(msg.source)
       for (const adj of (parsed.attachments || [])) {
-        await guardarAdjunto(adj, descargados)
+        await guardarAdjunto(adj, descargados, cuenta.nombre)
       }
       // Marcar como leído
       try { await client.messageFlagsAdd({ uid: msg.uid }, ['\\Seen'], { uid: true }) } catch {}
@@ -167,19 +167,30 @@ async function procesarCuenta(cuenta) {
   if (!cuenta.pass) { log(`⚠️  ${cuenta.nombre}: sin contraseña`); return 0 }
   log(`Procesando ${cuenta.nombre}...`)
 
-  // Paso 1: obtener UIDs de hoy con attachments relevantes
+  // Paso 1: buscar todos los no leídos con adjuntos
   const client = crearCliente(cuenta)
   let uidsConFactura = []
   try {
     await client.connect()
     await client.mailboxOpen('INBOX')
-    const hoy = new Date(); hoy.setHours(0, 0, 0, 0)
-    const todosHoy = await client.search({ since: hoy }, { uid: true })
-    if (todosHoy.length === 0) { log(`  ${cuenta.nombre}: sin correos hoy`); await client.logout(); return 0 }
-    log(`  ${cuenta.nombre}: ${todosHoy.length} correo(s) hoy`)
+    // Buscar NO leídos — sin restricción de fecha
+    const todosHoy = await client.search({ seen: false }, { uid: true })
+    if (todosHoy.length === 0) { log(`  ${cuenta.nombre}: sin correos no leídos`); await client.logout(); return 0 }
+    log(`  ${cuenta.nombre}: ${todosHoy.length} correo(s) no leídos`)
 
-    for await (const msg of client.fetch(todosHoy, { bodyStructure: true, uid: true }, { uid: true })) {
-      if (tieneFactura(msg.bodyStructure)) uidsConFactura.push(msg.uid)
+    // Escanear estructura en lotes de 200 para no saturar la conexión
+    const LOTE_SCAN = 200
+    for (let i = 0; i < todosHoy.length; i += LOTE_SCAN) {
+      const lote = todosHoy.slice(i, i + LOTE_SCAN)
+      try {
+        for await (const msg of client.fetch(lote, { bodyStructure: true, uid: true }, { uid: true })) {
+          if (tieneFactura(msg.bodyStructure)) uidsConFactura.push(msg.uid)
+        }
+        if (i % 1000 === 0 && i > 0) log(`  ${cuenta.nombre}: escaneados ${i}/${todosHoy.length}...`)
+      } catch (e) {
+        log(`  ⚠️  Error escaneo lote ${i}: ${e.message}`)
+        await esperar(3000)
+      }
     }
     await client.logout()
   } catch (err) {
