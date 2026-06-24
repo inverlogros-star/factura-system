@@ -2,7 +2,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
-import { Upload, Trash2, PackageCheck, Eye, FileSpreadsheet, FileText, FileCode, Bug, CheckSquare, Square } from 'lucide-react'
+import { Upload, Trash2, PackageCheck, Eye, FileSpreadsheet, FileText, FileCode, Bug, CheckSquare, Square, Database, CalendarIcon } from 'lucide-react'
 import { parsearReciboXML } from '@/lib/parser-dian'
 import { parsearReciboExcel } from '@/lib/parser-recibo-excel'
 import { parsearReciboPDF } from '@/lib/parser-recibo-pdf'
@@ -13,12 +13,26 @@ import DetalleRecibo from '@/components/DetalleRecibo'
 
 const FORMATOS_ACEPTADOS = '.xml,.xlsx,.xls,.pdf'
 
+// Fecha de hoy y primer día del mes en formato YYYY-MM-DD
+function hoy() { return new Date().toISOString().slice(0, 10) }
+function primerDiaMes() {
+  const d = new Date(); d.setDate(1)
+  return d.toISOString().slice(0, 10)
+}
+
 export default function RecibosPage() {
-  const [recibos, setRecibos] = useState<ReciboMercancia[]>([])
-  const [cargando, setCargando] = useState(false)
+  const [recibos, setRecibos]         = useState<ReciboMercancia[]>([])
+  const [cargando, setCargando]       = useState(false)
   const [seleccionado, setSeleccionado] = useState<ReciboMercancia | null>(null)
-  const [marcados, setMarcados] = useState<Set<string>>(new Set())
-  const [debugTexto, setDebugTexto] = useState<string | null>(null)
+  const [marcados, setMarcados]       = useState<Set<string>>(new Set())
+  const [debugTexto, setDebugTexto]   = useState<string | null>(null)
+
+  // Importación desde BD
+  const [fechaInicio, setFechaInicio] = useState(primerDiaMes())
+  const [fechaFin, setFechaFin]       = useState(hoy())
+  const [importandoBD, setImportandoBD] = useState(false)
+  const [resultadoBD, setResultadoBD] = useState<string | null>(null)
+
   const inputRef = useRef<HTMLInputElement>(null)
   const debugRef = useRef<HTMLInputElement>(null)
 
@@ -61,6 +75,34 @@ export default function RecibosPage() {
     setDebugTexto(data.texto)
   }
 
+  async function importarDesdeBD() {
+    if (!fechaInicio || !fechaFin) { toast.error('Selecciona ambas fechas'); return }
+    if (fechaInicio > fechaFin) { toast.error('La fecha inicial no puede ser mayor a la final'); return }
+    setImportandoBD(true)
+    setResultadoBD(null)
+    try {
+      const res = await fetch('/api/recibos/importar-bd', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ fechaInicio, fechaFin }),
+      })
+      const data = await res.json()
+      if (data.error) {
+        toast.error(`Error: ${data.error}`)
+        setResultadoBD(`❌ ${data.error}`)
+      } else {
+        const msg = `✅ ${data.importados} importados · ${data.duplicados} duplicados · ${data.errores} errores`
+        toast.success(`${data.importados} recibo(s) importado(s) desde BD`)
+        setResultadoBD(msg)
+        await recargar()
+      }
+    } catch (e) {
+      toast.error('Error de conexión')
+      setResultadoBD('❌ Error de conexión con la API')
+    }
+    setImportandoBD(false)
+  }
+
   async function eliminarMarcados() {
     for (const id of marcados) await storeRecibos.delete(id)
     toast.success(`${marcados.size} recibo(s) eliminado(s)`)
@@ -74,13 +116,12 @@ export default function RecibosPage() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">Recibos de Mercancía</h1>
-          <p className="text-gray-500 text-sm mt-1">Carga recibos en XML, Excel o PDF</p>
+          <p className="text-gray-500 text-sm mt-1">Carga recibos en XML, Excel, PDF o importa desde el sistema</p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex gap-2 flex-wrap">
           {marcados.size > 0 && (
             <Button variant="destructive" onClick={eliminarMarcados}>
-              <Trash2 size={15} className="mr-1.5" />
-              Eliminar ({marcados.size})
+              <Trash2 size={15} className="mr-1.5" /> Eliminar ({marcados.size})
             </Button>
           )}
           <Button onClick={() => inputRef.current?.click()} disabled={cargando}>
@@ -97,6 +138,70 @@ export default function RecibosPage() {
           onChange={e => handleDebug(e.target.files)} />
       </div>
 
+      {/* ── Importar desde BD ─────────────────────────────────────────── */}
+      <Card className="border-blue-200 bg-blue-50/40">
+        <CardHeader className="pb-3">
+          <CardTitle className="text-base flex items-center gap-2">
+            <Database size={18} className="text-blue-600" />
+            Importar desde Sistema Pacardyl (MySQL)
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="flex flex-wrap gap-4 items-end">
+            {/* Fecha inicial */}
+            <div className="space-y-1">
+              <label className="text-xs font-semibold text-gray-600 flex items-center gap-1">
+                <CalendarIcon size={12} /> Fecha inicial
+              </label>
+              <div className="relative">
+                <input
+                  type="date"
+                  value={fechaInicio}
+                  onChange={e => setFechaInicio(e.target.value)}
+                  className="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400 bg-white cursor-pointer"
+                />
+              </div>
+            </div>
+
+            {/* Fecha final */}
+            <div className="space-y-1">
+              <label className="text-xs font-semibold text-gray-600 flex items-center gap-1">
+                <CalendarIcon size={12} /> Fecha final
+              </label>
+              <div className="relative">
+                <input
+                  type="date"
+                  value={fechaFin}
+                  onChange={e => setFechaFin(e.target.value)}
+                  className="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400 bg-white cursor-pointer"
+                />
+              </div>
+            </div>
+
+            {/* Botón importar */}
+            <Button
+              onClick={importarDesdeBD}
+              disabled={importandoBD}
+              className="bg-blue-700 hover:bg-blue-800"
+            >
+              <Database size={16} className="mr-2" />
+              {importandoBD ? 'Importando...' : 'Importar recibos'}
+            </Button>
+
+            {/* Resultado */}
+            {resultadoBD && (
+              <span className="text-sm font-medium text-gray-700 bg-white border rounded-lg px-3 py-2">
+                {resultadoBD}
+              </span>
+            )}
+          </div>
+          <p className="text-xs text-gray-400 mt-3">
+            Solo importa proveedores reales — omite entradas internas (NIT 222222222)
+          </p>
+        </CardContent>
+      </Card>
+
+      {/* Formatos */}
       <div className="flex gap-3 flex-wrap">
         {[
           { icon: <FileCode size={14} className="text-blue-500" />, label: 'XML' },
@@ -167,7 +272,7 @@ export default function RecibosPage() {
                         : <span className="text-gray-300">—</span>}
                     </td>
                     <td className="px-3 py-3">{r.proveedor || '—'}</td>
-                    <td className="px-3 py-3 text-gray-500">{r.nitProveedor || '—'}</td>
+                    <td className="px-3 py-3 text-gray-500 text-xs">{r.nitProveedor || '—'}</td>
                     <td className="px-3 py-3 text-gray-500">{r.fecha || '—'}</td>
                     <td className="px-3 py-3 font-medium">${Number(r.total).toLocaleString('es-CO')}</td>
                     <td className="px-3 py-3 text-gray-500">{r.productos.length} ítem(s)</td>
