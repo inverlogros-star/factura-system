@@ -23,6 +23,13 @@ export function encontrarReciboPorFactura(
   const nitFact = normalizarNIT(factura.nitProveedor || '')
 
   // 1. Últimos 4 dígitos del número de factura coinciden en cualquier campo del recibo
+  // 1a. Coincidir por numeroFacturaProveedor (campo exacto desde MySQL)
+  const porNoFactura = recibos.find(r =>
+    r.numeroFacturaProveedor && r.numeroFacturaProveedor === digitos
+  )
+  if (porNoFactura) return porNoFactura
+
+  // 1b. Últimos dígitos del número de recibo
   const porDigitos = recibos.find(r =>
     r.numeroRecibo.replace(/\D/g, '').endsWith(digitos) ||
     (r.xmlRaw && r.xmlRaw.includes(digitos))

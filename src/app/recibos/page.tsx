@@ -146,7 +146,7 @@ export default function RecibosPage() {
                       {todosMarcados ? <CheckSquare size={18} /> : <Square size={18} className="text-gray-400" />}
                     </button>
                   </th>
-                  {['No. Recibo','Proveedor','NIT','Fecha','Total','Productos',''].map(h => (
+                  {['No. Recibo','No. Factura','Proveedor','NIT','Fecha','Total','Productos',''].map(h => (
                     <th key={h} className="text-left px-3 py-3 font-medium text-gray-600">{h}</th>
                   ))}
                 </tr>
@@ -161,6 +161,11 @@ export default function RecibosPage() {
                         : <Square size={18} className="text-gray-300" />}
                     </td>
                     <td className="px-3 py-3 font-mono font-medium">{r.numeroRecibo}</td>
+                    <td className="px-3 py-3">
+                      {r.numeroFacturaProveedor
+                        ? <span className="bg-blue-100 text-blue-800 font-bold font-mono px-2 py-0.5 rounded text-xs">{r.numeroFacturaProveedor}</span>
+                        : <span className="text-gray-300">—</span>}
+                    </td>
                     <td className="px-3 py-3">{r.proveedor || '—'}</td>
                     <td className="px-3 py-3 text-gray-500">{r.nitProveedor || '—'}</td>
                     <td className="px-3 py-3 text-gray-500">{r.fecha || '—'}</td>

@@ -15,6 +15,7 @@ export interface ReciboMercancia {
   productos: ProductoRecibo[]
   total: number
   xmlRaw?: string
+  numeroFacturaProveedor?: string  // últimos dígitos del No. factura (para comparación)
   creadoEn: string
 }
 

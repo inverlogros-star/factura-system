@@ -4,7 +4,10 @@ import type { ReciboMercancia } from '@/types'
 
 export async function GET() {
   try {
-    const { rows } = await sql`SELECT * FROM recibos ORDER BY creado_en DESC`
+    const { rows } = await sql`
+      SELECT id, numero_recibo, proveedor, nit_proveedor, fecha,
+             productos, total, numero_factura_proveedor, creado_en
+      FROM recibos ORDER BY creado_en DESC`
     const recibos: ReciboMercancia[] = rows.map(r => ({
       id: r.id,
       numeroRecibo: r.numero_recibo,
@@ -13,7 +16,7 @@ export async function GET() {
       fecha: r.fecha,
       productos: r.productos,
       total: parseFloat(r.total),
-      xmlRaw: r.xml_raw,
+      numeroFacturaProveedor: r.numero_factura_proveedor,
       creadoEn: r.creado_en,
     }))
     return NextResponse.json(recibos)
@@ -26,9 +29,11 @@ export async function POST(req: NextRequest) {
   try {
     const r: ReciboMercancia = await req.json()
     await sql`
-      INSERT INTO recibos (id, numero_recibo, proveedor, nit_proveedor, fecha, productos, total, xml_raw, creado_en)
+      INSERT INTO recibos (id, numero_recibo, proveedor, nit_proveedor, fecha,
+        productos, total, xml_raw, numero_factura_proveedor, creado_en)
       VALUES (${r.id}, ${r.numeroRecibo}, ${r.proveedor}, ${r.nitProveedor}, ${r.fecha},
-        ${JSON.stringify(r.productos)}, ${r.total}, ${r.xmlRaw ?? null}, ${r.creadoEn})
+        ${JSON.stringify(r.productos)}, ${r.total}, ${r.xmlRaw ?? null},
+        ${r.numeroFacturaProveedor ?? null}, ${r.creadoEn})
       ON CONFLICT (id) DO NOTHING
     `
     return NextResponse.json({ ok: true })

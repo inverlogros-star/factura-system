@@ -76,14 +76,18 @@ function construirRecibos(filas) {
 
     if (!numRecibo) continue
 
+    // Limpiar el número de factura: quitar ceros iniciales, dejar solo dígitos significativos
+    const noFacturaLimpio = noFactura.replace(/^0+/, '') || noFactura
+
     if (!mapa.has(numRecibo)) {
       mapa.set(numRecibo, {
-        id:           `r-bd-${numRecibo}-${Date.now()}`,
-        numeroRecibo: numRecibo,
+        id:                       `r-bd-${numRecibo}-${Date.now()}`,
+        numeroRecibo:             numRecibo,
         proveedor,
-        nitProveedor: nitProv,
+        nitProveedor:             nitProv,
         fecha,
-        noFactura,        // número de factura del proveedor
+        numeroFacturaProveedor:   noFacturaLimpio,  // últimos dígitos del No. factura
+        noFactura:                noFacturaLimpio,
         tipoFactura,
         totalEncabezado: {
           total:       parseFloat(fila.Ent_Total       || 0),
@@ -163,9 +167,11 @@ async function main() {
     await conn.execute('CALL sp_crea_entradas_conta_tmp(?, ?)', [fechaInicio, fechaFin])
     log('✓ Tabla temporal creada')
 
-    // 3. Leer datos de la tabla temporal
-    log('Leyendo tmp_entradasconta...')
-    const [filas] = await conn.execute('SELECT * FROM tmp_entradasconta')
+    // 3. Leer datos — solo entradas reales (excluir NIT internos 222222222 y 99)
+    log('Leyendo tmp_entradasconta (solo proveedores reales)...')
+    const [filas] = await conn.execute(
+      "SELECT * FROM tmp_entradasconta WHERE Ent_Nit NOT IN ('222222222','99','0') AND (Ent_Nit IS NOT NULL AND Ent_Nit != '')"
+    )
     log(`✓ ${filas.length} fila(s) obtenidas`)
 
     if (filas.length === 0) {
