@@ -7,6 +7,7 @@ import {
   PackageCheck,
   GitCompareArrows,
   Clock,
+  Building2,
   ChevronRight,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
@@ -14,6 +15,7 @@ import { cn } from '@/lib/utils'
 const nav = [
   { href: '/', label: 'Dashboard', icon: LayoutDashboard },
   { href: '/facturas', label: 'Facturas', icon: FileText },
+  { href: '/proveedores', label: 'Por Proveedor / Fecha', icon: Building2 },
   { href: '/recibos', label: 'Recibos de Mercancía', icon: PackageCheck },
   { href: '/comparacion', label: 'Comparación', icon: GitCompareArrows },
   { href: '/pendientes', label: 'Pendientes', icon: Clock },
