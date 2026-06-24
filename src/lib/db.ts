@@ -25,6 +25,7 @@ export async function inicializarDB() {
   await sql`ALTER TABLE facturas ADD COLUMN IF NOT EXISTS correo_origen TEXT`
   await sql`ALTER TABLE facturas ADD COLUMN IF NOT EXISTS tipo_documento TEXT DEFAULT 'factura'`
   await sql`ALTER TABLE recibos ADD COLUMN IF NOT EXISTS numero_factura_proveedor TEXT`
+  await sql`ALTER TABLE recibos ADD COLUMN IF NOT EXISTS totales JSONB`
 
   await sql`
     CREATE TABLE IF NOT EXISTS recibos (

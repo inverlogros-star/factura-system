@@ -62,17 +62,23 @@ function construirRecibos(filas) {
     // Detalle del producto
     const codigo      = String(fila.EntDet_Barra    || '').trim()
     const descripcion = String(fila.EntDet_Articulo || '').trim()
-    const cantidad    = parseFloat(fila.EntDet_CanRec  || 0)
-    const precio      = parseFloat(fila.EntDet_Costo   || 0)
-    const descuento1  = parseFloat(fila.EntDet_Descue01 || 0)
-    const descuento2  = parseFloat(fila.EntDet_Descue02 || 0)
-    const descuento3  = parseFloat(fila.EntDet_Descue03 || 0)
-    const iva         = parseFloat(fila.EntDet_Iva      || 0)
-    const iconsumo    = parseFloat(fila.EntDet_IConsumo || 0)
-    const ibua        = parseFloat(fila.EntDet_IBUA     || 0)
-    const icui        = parseFloat(fila.EntDet_ICUI     || 0)
-    const costoNeto   = parseFloat(fila.EntDet_CostoNeto || 0)
-    const totalNeto   = parseFloat(fila.EntDet_TotalNeto || (cantidad * costoNeto))
+    const cantidad    = parseFloat(fila.EntDet_CanRec    || 0)
+    const costoBruto  = parseFloat(fila.EntDet_CostoBruto || 0)
+    const costoNeto   = parseFloat(fila.EntDet_CostoNeto  || 0)
+    const descuento1  = parseFloat(fila.EntDet_Descue01   || 0)
+    const descuento2  = parseFloat(fila.EntDet_Descue02   || 0)
+    const descuento3  = parseFloat(fila.EntDet_Descue03   || 0)
+    const descuento   = descuento1 + descuento2 + descuento3
+    const iva         = parseFloat(fila.EntDet_Iva        || 0)
+    const iconsumo    = parseFloat(fila.EntDet_IConsumo   || 0)
+    const ibua        = parseFloat(fila.EntDet_IBUA       || 0)
+    const icui        = parseFloat(fila.EntDet_ICUI       || 0)
+    const estampillas = parseFloat(fila.EntDet_Estampillas|| 0)
+    const otros       = parseFloat(fila.EntDet_Otros      || 0)
+    const totalBruto  = parseFloat(fila.EntDet_TotalBruto || (cantidad * costoBruto))
+    const totalNeto   = parseFloat(fila.EntDet_TotalNeto  || (cantidad * costoNeto))
+    // Calcular tasa IVA: 0, 5 o 19
+    const tasaIva     = totalBruto > 0 && iva > 0 ? Math.round((iva / totalBruto) * 100) : 0
 
     if (!numRecibo) continue
 
@@ -110,21 +116,39 @@ function construirRecibos(filas) {
         codigo,
         descripcion,
         cantidad,
+        costoBruto,
         precioUnitario: costoNeto,
-        descuento: descuento1 + descuento2 + descuento3,
+        descuento,
+        subtotal: totalNeto,
         iva,
+        tasaIva,
         iconsumo,
         ibua,
         icui,
-        subtotal: totalNeto,
+        estampillas,
+        otros,
       })
       recibo.total += totalNeto
     }
   }
 
-  // Usar total del encabezado si el calculado es 0
+  // Completar totales desde encabezado y calcular resumen de impuestos
   for (const recibo of mapa.values()) {
     if (recibo.total === 0) recibo.total = recibo.totalEncabezado.neto || recibo.totalEncabezado.total
+
+    // Calcular totales de impuestos sumando las líneas de productos
+    const prods = recibo.productos
+    recibo.totales = {
+      bruto:        prods.reduce((s, p) => s + (p.costoBruto || 0) * p.cantidad, 0),
+      descuentos:   prods.reduce((s, p) => s + (p.descuento || 0), 0),
+      subtotalNeto: prods.reduce((s, p) => s + p.subtotal, 0),
+      iva:          prods.reduce((s, p) => s + (p.iva || 0), 0),
+      iconsumo:     prods.reduce((s, p) => s + (p.iconsumo || 0), 0),
+      ibua:         prods.reduce((s, p) => s + (p.ibua || 0), 0),
+      icui:         prods.reduce((s, p) => s + (p.icui || 0), 0),
+      estampillas:  prods.reduce((s, p) => s + (p.estampillas || 0), 0),
+      neto:         recibo.total,
+    }
   }
 
   return Array.from(mapa.values())

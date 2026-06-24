@@ -16,6 +16,7 @@ export async function GET() {
       fecha: r.fecha,
       productos: r.productos,
       total: parseFloat(r.total),
+      totales: r.totales ?? undefined,
       numeroFacturaProveedor: r.numero_factura_proveedor,
       creadoEn: r.creado_en,
     }))
@@ -30,10 +31,18 @@ export async function POST(req: NextRequest) {
     const r: ReciboMercancia = await req.json()
     await sql`
       INSERT INTO recibos (id, numero_recibo, proveedor, nit_proveedor, fecha,
-        productos, total, xml_raw, numero_factura_proveedor, creado_en)
+        productos, total, xml_raw, numero_factura_proveedor, totales, creado_en)
       VALUES (${r.id}, ${r.numeroRecibo}, ${r.proveedor}, ${r.nitProveedor}, ${r.fecha},
         ${JSON.stringify(r.productos)}, ${r.total}, ${r.xmlRaw ?? null},
-        ${r.numeroFacturaProveedor ?? null}, ${r.creadoEn})
+        ${r.numeroFacturaProveedor ?? null}, ${r.totales ? JSON.stringify(r.totales) : null}, ${r.creadoEn})
+      ON CONFLICT (id) DO UPDATE SET
+        proveedor = EXCLUDED.proveedor,
+        nit_proveedor = EXCLUDED.nit_proveedor,
+        fecha = EXCLUDED.fecha,
+        productos = EXCLUDED.productos,
+        total = EXCLUDED.total,
+        totales = EXCLUDED.totales,
+        numero_factura_proveedor = EXCLUDED.numero_factura_proveedor
       ON CONFLICT (id) DO NOTHING
     `
     return NextResponse.json({ ok: true })
