@@ -55,9 +55,13 @@ function postJSON(url, body) {
 function tieneFactura(bs) {
   if (!bs) return false
   const s = JSON.stringify(bs).toLowerCase()
+  // Solo ZIP o XML — excluir PDF, DOC, DOCX, XLS, imágenes
+  if (s.includes('.pdf') || s.includes('application/pdf')) return false
+  if (s.includes('.doc') || s.includes('msword') || s.includes('officedocument')) return false
+  if (s.includes('image/') || s.includes('.jpg') || s.includes('.png')) return false
   return s.includes('.zip') || s.includes('application/zip') ||
     s.includes('application/xml') || s.includes('text/xml') ||
-    (s.includes('.xml') && !s.includes('.docx') && !s.includes('.xlsx'))
+    s.includes('.xml')
 }
 
 function cargarProgreso() {
@@ -129,9 +133,20 @@ async function descargarUID(cuenta, uid) {
     await client.mailboxOpen('INBOX')
     for await (const msg of client.fetch([uid], { source: true, uid: true }, { uid: true })) {
       const parsed = await simpleParser(msg.source)
-      for (const adj of (parsed.attachments || [])) {
+      // Ignorar correos sin adjuntos
+      if (!parsed.attachments || parsed.attachments.length === 0) continue
+
+      for (const adj of parsed.attachments) {
         const n = (adj.filename || '').toLowerCase()
         const ct = (adj.contentType || '').toLowerCase()
+
+        // Ignorar .pdf, .doc, .docx, .xls, .xlsx, imágenes y otros no relevantes
+        if (n.endsWith('.pdf') || n.endsWith('.doc') || n.endsWith('.docx') ||
+            n.endsWith('.xls') || n.endsWith('.xlsx') || n.endsWith('.jpg') ||
+            n.endsWith('.png') || n.endsWith('.jpeg') || n.endsWith('.gif') ||
+            ct.startsWith('image/') || ct === 'application/pdf' ||
+            ct.includes('word') || ct.includes('excel') || ct.includes('spreadsheet')) continue
+
         const esXml = n.endsWith('.xml') || ct === 'text/xml' || ct === 'application/xml' ||
           (ct === 'application/octet-stream' && adj.content?.slice(0, 5).toString().includes('<?xml'))
         const esZip = n.endsWith('.zip') || ct === 'application/zip'

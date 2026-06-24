@@ -74,7 +74,13 @@ async function procesarMensaje(source, cuentaNombre) {
       const n = (adj.filename || '').toLowerCase()
       const ct = (adj.contentType || '').toLowerCase()
 
-      // XML directo (excluir docx, xlsx, etc. que también contienen 'xml' en su MIME)
+      // Ignorar .pdf, .doc, .docx, imágenes y otros no relevantes
+      if (n.endsWith('.pdf') || n.endsWith('.doc') || n.endsWith('.docx') ||
+          n.endsWith('.xls') || n.endsWith('.xlsx') || n.endsWith('.jpg') ||
+          n.endsWith('.png') || n.endsWith('.jpeg') || ct.startsWith('image/') ||
+          ct === 'application/pdf' || ct.includes('word') || ct.includes('excel')) continue
+
+      // XML directo
       const esXmlReal = n.endsWith('.xml') ||
         ct === 'text/xml' || ct === 'application/xml' ||
         (ct === 'application/octet-stream' && adj.content?.slice(0, 5).toString().includes('<?xml'))

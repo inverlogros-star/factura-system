@@ -103,7 +103,14 @@ function tieneFactura(bodyStructure) {
 async function guardarAdjunto(adjunto, descargados, cuentaNombre) {
   const n = (adjunto.filename || '').toLowerCase()
   const ct = (adjunto.contentType || '').toLowerCase()
-  const esXml = n.endsWith('.xml') || ct.includes('xml') ||
+
+  // Ignorar .pdf, .doc, .docx, imágenes y otros no relevantes
+  if (n.endsWith('.pdf') || n.endsWith('.doc') || n.endsWith('.docx') ||
+      n.endsWith('.xls') || n.endsWith('.xlsx') || n.endsWith('.jpg') ||
+      n.endsWith('.png') || n.endsWith('.jpeg') || ct.startsWith('image/') ||
+      ct === 'application/pdf' || ct.includes('word') || ct.includes('excel')) return
+
+  const esXml = n.endsWith('.xml') || ct === 'text/xml' || ct === 'application/xml' ||
     (ct === 'application/octet-stream' && adjunto.content?.slice(0, 10).toString().includes('<?xml'))
 
   if (esXml) {

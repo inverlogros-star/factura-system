@@ -10,6 +10,16 @@ export async function POST(req: NextRequest) {
 
     const datos = await parsearFacturaDIAN(xmlContent)
 
+    // Rechazar documentos de tipo "otro" — no son facturas ni notas
+    if (datos.tipoDocumento === 'otro') {
+      return NextResponse.json({ ok: true, omitido: true, mensaje: `Documento tipo "otro" ignorado` })
+    }
+
+    // Rechazar documentos sin número, sin proveedor y sin productos (vacíos)
+    if (!datos.numeroFactura && !datos.proveedor && datos.productos.length === 0 && datos.total === 0) {
+      return NextResponse.json({ ok: true, omitido: true, mensaje: 'Documento vacío ignorado' })
+    }
+
     // Buscar si ya existe por número de factura
     const { rows: existente } = await sql`
       SELECT id, estado FROM facturas WHERE numero_factura = ${datos.numeroFactura} LIMIT 1
