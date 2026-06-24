@@ -75,32 +75,19 @@ export default function RecibosPage() {
     setDebugTexto(data.texto)
   }
 
+  const scriptPath = 'C:\\Users\\SPalacio\\Documents\\PROYECTO PCARDYL\\factura-system\\scripts\\importar-recibos-bd.js'
+
   async function importarDesdeBD() {
     if (!fechaInicio || !fechaFin) { toast.error('Selecciona ambas fechas'); return }
     if (fechaInicio > fechaFin) { toast.error('La fecha inicial no puede ser mayor a la final'); return }
-    setImportandoBD(true)
-    setResultadoBD(null)
+    const cmd = `node "${scriptPath}" ${fechaInicio} ${fechaFin}`
     try {
-      const res = await fetch('/api/recibos/importar-bd', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ fechaInicio, fechaFin }),
-      })
-      const data = await res.json()
-      if (data.error) {
-        toast.error(`Error: ${data.error}`)
-        setResultadoBD(`❌ ${data.error}`)
-      } else {
-        const msg = `✅ ${data.importados} importados · ${data.duplicados} duplicados · ${data.errores} errores`
-        toast.success(`${data.importados} recibo(s) importado(s) desde BD`)
-        setResultadoBD(msg)
-        await recargar()
-      }
-    } catch (e) {
-      toast.error('Error de conexión')
-      setResultadoBD('❌ Error de conexión con la API')
+      await navigator.clipboard.writeText(cmd)
+      toast.success('Comando copiado al portapapeles — pégalo en CMD o PowerShell')
+    } catch {
+      toast.info('Copia el comando manualmente')
     }
-    setImportandoBD(false)
+    setResultadoBD(cmd)
   }
 
   async function eliminarMarcados() {
@@ -185,18 +172,26 @@ export default function RecibosPage() {
               className="bg-blue-700 hover:bg-blue-800"
             >
               <Database size={16} className="mr-2" />
-              {importandoBD ? 'Importando...' : 'Importar recibos'}
+              {importandoBD ? 'Generando...' : 'Generar comando'}
             </Button>
 
             {/* Resultado */}
             {resultadoBD && (
-              <span className="text-sm font-medium text-gray-700 bg-white border rounded-lg px-3 py-2">
-                {resultadoBD}
-              </span>
+              <div className="w-full mt-2">
+                <p className="text-xs text-gray-500 mb-1">Ejecuta este comando en tu PC (CMD o PowerShell):</p>
+                <div className="flex items-center gap-2">
+                  <code className="flex-1 bg-gray-900 text-green-400 text-xs px-3 py-2 rounded font-mono break-all">
+                    {resultadoBD}
+                  </code>
+                  <Button size="sm" variant="outline" onClick={() => navigator.clipboard.writeText(resultadoBD).then(() => toast.success('Copiado'))}>
+                    Copiar
+                  </Button>
+                </div>
+              </div>
             )}
           </div>
           <p className="text-xs text-gray-400 mt-3">
-            Solo importa proveedores reales — omite entradas internas (NIT 222222222)
+            ℹ️ El MySQL está en la red local (192.168.11.251) — el comando se ejecuta desde tu PC, los datos se suben automáticamente al sistema.
           </p>
         </CardContent>
       </Card>
