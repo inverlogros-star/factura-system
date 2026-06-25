@@ -18,25 +18,22 @@ export default function Dashboard() {
     storeComparaciones.getAll().then(setComparaciones)
   }, [])
 
-  const pendientes     = facturas.filter(f => f.estado === 'pendiente').length
-  const conDiferencias = facturas.filter(f => f.estado === 'con_diferencias').length
-  const conciliadas    = facturas.filter(f => f.estado === 'conciliada').length
-  const rechazadas     = facturas.filter(f => f.estado === 'rechazada').length
+  const pendientes      = facturas.filter(f => f.estado === 'pendiente').length
 
-  // Comparaciones
-  const compConDif    = comparaciones.filter(c => c.tieneDiferencias).length
-  const compSinDif    = comparaciones.filter(c => !c.tieneDiferencias).length
+  // Fuente única: tabla comparaciones
   const totalComparadas = comparaciones.length
+  const compConDif      = comparaciones.filter(c => c.tieneDiferencias).length
+  const compSinDif      = comparaciones.filter(c => !c.tieneDiferencias).length
+  // Pendientes = facturas aún no comparadas
+  const sinComparar     = facturas.length - totalComparadas
 
   const stats = [
-    { label: 'Total Facturas',      value: facturas.length, icon: FileText,         color: 'text-blue-600',   bg: 'bg-blue-50',   href: '/facturas' },
-    { label: 'Recibos Cargados',    value: recibos.length,  icon: PackageCheck,     color: 'text-green-600',  bg: 'bg-green-50',  href: '/recibos' },
-    { label: 'Pendientes',          value: pendientes,      icon: Clock,            color: 'text-yellow-600', bg: 'bg-yellow-50', href: '/pendientes' },
-    { label: 'Total Comparadas',    value: totalComparadas, icon: GitCompareArrows, color: 'text-blue-700',   bg: 'bg-blue-100',  href: '/comparacion' },
-    { label: 'Comparadas con dif.', value: compConDif,      icon: AlertTriangle,    color: 'text-red-600',    bg: 'bg-red-50',    href: '/comparacion' },
-    { label: 'Comparadas sin dif.', value: compSinDif,      icon: ShieldCheck,      color: 'text-emerald-600',bg: 'bg-emerald-50',href: '/comparacion' },
-    { label: 'Conciliadas',         value: conciliadas,     icon: CheckCircle2,     color: 'text-emerald-600',bg: 'bg-emerald-50',href: '/comparacion' },
-    { label: 'Con Diferencias',     value: conDiferencias,  icon: XCircle,          color: 'text-red-600',    bg: 'bg-red-100',   href: '/comparacion' },
+    { label: 'Total Facturas',           value: facturas.length,  icon: FileText,         color: 'text-blue-600',    bg: 'bg-blue-50',    href: '/facturas' },
+    { label: 'Recibos Cargados',         value: recibos.length,   icon: PackageCheck,     color: 'text-green-600',   bg: 'bg-green-50',   href: '/recibos' },
+    { label: 'Sin comparar',             value: sinComparar,      icon: Clock,            color: 'text-yellow-600',  bg: 'bg-yellow-50',  href: '/pendientes' },
+    { label: 'Total Comparadas',         value: totalComparadas,  icon: GitCompareArrows, color: 'text-blue-700',    bg: 'bg-blue-100',   href: '/comparacion' },
+    { label: 'Comparadas CON diferencia',value: compConDif,       icon: AlertTriangle,    color: 'text-red-600',     bg: 'bg-red-50',     href: '/comparacion' },
+    { label: 'Comparadas SIN diferencia',value: compSinDif,       icon: ShieldCheck,      color: 'text-emerald-600', bg: 'bg-emerald-50', href: '/comparacion' },
   ]
 
   const recientes = comparaciones.slice(0, 5)
@@ -48,7 +45,20 @@ export default function Dashboard() {
         <p className="text-gray-500 text-sm mt-1">Resumen del sistema de conciliación de facturas</p>
       </div>
 
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+      {/* Verificación: Total = Sin comparar + Con dif + Sin dif */}
+      <div className="bg-blue-50 border border-blue-200 rounded-lg px-4 py-2 text-xs text-blue-700 flex gap-6">
+        <span>Total: <b>{facturas.length}</b></span>
+        <span>=</span>
+        <span>Sin comparar: <b>{sinComparar}</b></span>
+        <span>+</span>
+        <span>Con diferencia: <b>{compConDif}</b></span>
+        <span>+</span>
+        <span>Sin diferencia: <b>{compSinDif}</b></span>
+        <span className={facturas.length === sinComparar + compConDif + compSinDif ? 'text-green-700 font-bold' : 'text-red-600 font-bold'}>
+          {facturas.length === sinComparar + compConDif + compSinDif ? '✓ Cuadra' : '⚠ No cuadra'}
+        </span>
+      </div>
+      <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
         {stats.map(({ label, value, icon: Icon, color, bg, href }) => (
           <Link key={label} href={href}>
             <Card className="hover:shadow-md transition-shadow cursor-pointer">
