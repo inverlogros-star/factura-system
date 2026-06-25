@@ -42,28 +42,39 @@ export default function ReportePage() {
     if (cargando) return null
     const d1 = desde, d2 = hasta + 'T23:59:59'
 
-    // Facturas en el rango
-    const facturasRango = facturas.filter(f => f.fecha >= d1 && f.fecha <= hasta)
+    // Normalizar fechas para comparación segura
+    const normalize = (fecha: string) => (fecha || '').slice(0, 10)
+
+    // ── RECIBOS DE MERCANCÍA (de MySQL) ──────────────────────────────
+    const recibosRango  = recibos.filter(r => {
+      const f = normalize(r.fecha)
+      return f >= d1 && f <= hasta
+    })
+    const totalRecibido = recibosRango.reduce((s, r) => s + Number(r.total), 0)
+
+    // ── FACTURAS ELECTRÓNICAS (de DIAN) ──────────────────────────────
+    const facturasRango = facturas.filter(f => {
+      const fecha = normalize(f.fecha)
+      return fecha >= d1 && fecha <= hasta
+    })
     const facturasPendientes = facturasRango.filter(f => f.estado === 'pendiente')
-    const facturasComparadas = facturasRango.filter(f => f.estado !== 'pendiente')
     const factConDif         = facturasRango.filter(f => f.estado === 'con_diferencias')
     const factSinDif         = facturasRango.filter(f => f.estado === 'conciliada')
     const totalFacturado     = facturasRango.reduce((s, f) => s + Number(f.total), 0)
 
-    // Por tipo
-    const soloFacturas    = facturasRango.filter(f => (f.tipoDocumento || 'factura') === 'factura')
-    const notasCredito    = facturasRango.filter(f => f.tipoDocumento === 'nota_credito')
-    const notasDebito     = facturasRango.filter(f => f.tipoDocumento === 'nota_debito')
+    // Por tipo de documento
+    const soloFacturas = facturasRango.filter(f => (f.tipoDocumento || 'factura') === 'factura')
+    const notasCredito = facturasRango.filter(f => f.tipoDocumento === 'nota_credito')
+    const notasDebito  = facturasRango.filter(f => f.tipoDocumento === 'nota_debito')
 
-    // Recibos en el rango
-    const recibosRango  = recibos.filter(r => r.fecha >= d1 && r.fecha <= hasta)
-    const totalRecibido = recibosRango.reduce((s, r) => s + Number(r.total), 0)
+    // ── COMPARACIONES ────────────────────────────────────────────────
+    const compRango  = comparaciones.filter(c => normalize(c.fechaComparacion) >= d1 && normalize(c.fechaComparacion) <= hasta)
+    const compConDif = compRango.filter(c => c.tieneDiferencias)
+    const compSinDif = compRango.filter(c => !c.tieneDiferencias)
+    const difTotal   = compRango.reduce((s, c) => s + Math.abs(Number(c.valorDiferenciaTotal)), 0)
 
-    // Comparaciones en el rango
-    const compRango     = comparaciones.filter(c => c.fechaComparacion >= d1)
-    const compConDif    = compRango.filter(c => c.tieneDiferencias)
-    const compSinDif    = compRango.filter(c => !c.tieneDiferencias)
-    const difTotal      = compRango.reduce((s, c) => s + Number(c.valorDiferenciaTotal), 0)
+    // Facturas sin comparar (pendiente con recibo disponible)
+    const facturasComparadas = facturasRango.filter(f => f.estado !== 'pendiente')
 
     // Top proveedores con más diferencias
     const provMap = new Map<string, { nombre: string; facturas: number; conDif: number; valorDif: number }>()
@@ -144,8 +155,8 @@ export default function ReportePage() {
               },
               {
                 icon: <FileText size={22} className="text-blue-600" />,
-                bg: 'bg-blue-50', label: 'Facturas Recibidas', value: data.soloFacturas.length,
-                sub: `Total facturado: $${fmt(data.totalFacturado)}`, color: 'text-blue-700',
+                bg: 'bg-blue-50', label: 'Facturas Electrónicas DIAN', value: data.facturasRango.length,
+                sub: `Facturas: ${data.soloFacturas.length} | N.Créd: ${data.notasCredito.length} | Total: $${fmt(data.totalFacturado)}`, color: 'text-blue-700',
               },
               {
                 icon: <AlertTriangle size={22} className="text-red-600" />,

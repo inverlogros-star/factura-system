@@ -189,6 +189,36 @@ export default function ComparacionPage() {
     if (sinRecibo > 0) toast.warning(`${sinRecibo} sin recibo asociado`)
   }
 
+  async function compararTodo() {
+    // Comparar TODAS las facturas que tengan recibo detectado y no estén ya comparadas
+    const pendientes = facturas.filter(f =>
+      f.estado === 'pendiente' && !!encontrarReciboPorFactura(f, recibos)
+    )
+    if (pendientes.length === 0) { toast.info('No hay facturas pendientes con recibo para comparar'); return }
+    setProcesando(true)
+    let procesadas = 0
+    for (const factura of pendientes) {
+      const recibo = encontrarReciboPorFactura(factura, recibos)
+      if (!recibo) continue
+      const notasCredito = facturas.filter(f =>
+        f.tipoDocumento === 'nota_credito' &&
+        (f.nitProveedor === factura.nitProveedor || f.proveedor?.toLowerCase() === factura.proveedor?.toLowerCase())
+      )
+      const resultado = compararFacturaConRecibo(factura, recibo, notasCredito)
+      await storeComparaciones.save(resultado)
+      await storeFacturas.save({
+        ...factura,
+        estado: resultado.tieneDiferencias ? 'con_diferencias' : 'conciliada',
+        reciboAsociadoId: recibo.id,
+      })
+      procesadas++
+    }
+    await recargar()
+    setSeleccionadas(new Set())
+    setProcesando(false)
+    toast.success(`${procesadas} facturas comparadas automáticamente`)
+  }
+
   async function eliminarComparacion(comparacionId: string, facturaId: string) {
     await storeComparaciones.delete(comparacionId)
     const factura = facturasMap[facturaId]
@@ -228,11 +258,20 @@ export default function ComparacionPage() {
             Coteja facturas DIAN con recibos de mercancía usando los últimos 4 dígitos
           </p>
         </div>
-        <div className="flex gap-2 items-center">
+        <div className="flex gap-2 items-center flex-wrap">
+          {/* Comparar todo en un clic */}
+          <Button
+            onClick={compararTodo}
+            disabled={procesando}
+            className="bg-emerald-700 hover:bg-emerald-800"
+          >
+            <GitCompareArrows size={15} className="mr-1.5" />
+            {procesando ? 'Comparando...' : 'Comparar Todo'}
+          </Button>
           {seleccionadas.size > 0 && (
-            <Button onClick={compararSeleccionadas} disabled={procesando}>
+            <Button onClick={compararSeleccionadas} disabled={procesando} variant="outline">
               <GitCompareArrows size={15} className="mr-1.5" />
-              {procesando ? 'Comparando...' : `Comparar (${seleccionadas.size})`}
+              {procesando ? '...' : `Comparar selec. (${seleccionadas.size})`}
             </Button>
           )}
         </div>
