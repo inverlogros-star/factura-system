@@ -74,7 +74,89 @@ function similitud(a: string, b: string): number {
   return Math.min(1, jaccard + bonus)
 }
 
-const UMBRAL_DESC = 0.45
+const UMBRAL_DESC = 0.40
+
+// ── Sinónimos regionales Colombia ─────────────────────────────────────────────
+// Frutas, verduras y productos con nombres distintos por región
+const SINONIMOS: Record<string, string[]> = {
+  // Frutas exóticas y tropicales
+  'gulupa':          ['curuba redonda', 'maracuya pequeño', 'granadilla china', 'passion fruit'],
+  'curuba':          ['taxo', 'curuba larga', 'tumbo', 'banana pasion'],
+  'uchuva':          ['uvilla', 'physalis', 'vejigon', 'capuli', 'tomatillo'],
+  'lulo':            ['naranjilla', 'tomate de monte'],
+  'pitahaya':        ['pitaya', 'dragon fruit', 'fruta del dragon'],
+  'feijoa':          ['guayabo del pais', 'guayaba feijoa', 'acca'],
+  'tomate de arbol': ['tamarillo', 'tomate de monte', 'tomate arbóreo'],
+  'chontaduro':      ['pejibaye', 'cachipay', 'pupunha'],
+  'guanabana':       ['graviola', 'soursop'],
+  'maracuya':        ['parchita', 'passion fruit', 'granadilla amarilla', 'parcha'],
+  'papaya':          ['lechosa', 'papaw', 'fruta bomba', 'mamão'],
+  'aguacate':        ['palta', 'avocado', 'cura', 'abacate'],
+  'pina':            ['ananas', 'ananás', 'piña perolera'],
+  'mora':            ['zarzamora', 'mora castilla', 'blackberry'],
+  'fresa':           ['frutilla', 'strawberry', 'fresón'],
+  'mamoncillo':      ['mamón', 'quenepa', 'limoncillo', 'mamon'],
+  'guayaba':         ['guava', 'guayabo'],
+  'zapote':          ['mamey', 'zapote negro', 'sapote'],
+  'nispero':         ['níspero', 'sapodilla', 'chiku'],
+  'granadilla':      ['granadilla dulce', 'sweet granadilla'],
+  'borojo':          ['borojó', 'borojo negro'],
+  'corozo':          ['palma corozo', 'naidí'],
+  'arazá':           ['araza', 'guayaba amazónica'],
+  'carambolo':       ['carambola', 'star fruit'],
+
+  // Verduras y tubérculos regionales
+  'auyama':          ['ahuyama', 'calabaza', 'zapallo', 'ahuama', 'calabacín'],
+  'yuca':            ['mandioca', 'cassava', 'tapioca', 'yuca amarga'],
+  'name':            ['ñame', 'yam', 'ñame espino'],
+  'arracacha':       ['apio', 'aracacha', 'blanco apio'],
+  'bore':            ['malanga', 'taro', 'ñampi'],
+  'guatila':         ['chayote', 'cidra', 'papa de aire', 'chayota'],
+  'pepino cohombro': ['cohombro', 'pepino pepon', 'cucumber', 'pepino latino'],
+  'cebolla junca':   ['cebolla larga', 'cebolla rama', 'cebollin', 'green onion', 'cebolla de rama'],
+  'cebolla cabezona':['cebolla blanca', 'cebolla morada', 'cebolla roja'],
+  'papa criolla':    ['papa amarilla', 'papa nativa', 'papa criolla especial'],
+  'papa capira':     ['papa pastusa', 'papa blanca', 'papa capira pastusa'],
+  'tomate chonto':   ['tomate', 'tomate criollo', 'tomatillo chonto'],
+  'tomate cherry':   ['tomate uva', 'tomatito', 'tomate bolita'],
+  'pimenton':        ['pimiento', 'chile dulce', 'bell pepper', 'morrón'],
+  'cilantro':        ['culantro', 'coriandro', 'cilantrón'],
+  'platano':         ['plátano hartón', 'plátano dominico', 'plantain', 'banano macho'],
+  'banano':          ['banana', 'guineo', 'manzanillo'],
+  'habichuela':      ['vainita', 'ejote', 'green bean', 'habichuela larga'],
+  'frijol':          ['fríjol', 'habichuela roja', 'bean', 'poroto'],
+  'arveja':          ['guisante', 'alverja', 'petit pois', 'pea'],
+  'repollo':         ['col', 'cabbage', 'col repollo'],
+  'coliflor':        ['brocoli de flor', 'cauliflower'],
+  'remolacha':       ['betarraga', 'beet', 'betabel', 'beterrada'],
+  'mango':           ['manga', 'mango tomy', 'mango tommy'],
+  'uva':             ['grape', 'uva red globe', 'uva crimson'],
+  'melon':           ['cantaloupe', 'melón cantaloup', 'melon chino', 'melon verde'],
+  'sandia':          ['sandía', 'watermelon', 'patilla'],
+  'maiz':            ['choclo', 'mazorca', 'elote', 'corn'],
+}
+
+// Normaliza para buscar en el diccionario
+function normalizarParaSinonimos(texto: string): string {
+  return texto.toLowerCase()
+    .normalize('NFD').replace(/[̀-ͯ]/g, '')
+    .replace(/[^a-z0-9\s]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+}
+
+// Busca si dos textos son sinónimos o contienen sinónimos conocidos
+function esSinonimo(a: string, b: string): boolean {
+  const na = normalizarParaSinonimos(a)
+  const nb = normalizarParaSinonimos(b)
+  for (const [clave, variantes] of Object.entries(SINONIMOS)) {
+    const todos = [clave, ...variantes].map(v => normalizarParaSinonimos(v))
+    const enA = todos.some(v => na.includes(v) || v.includes(na.split(' ')[0]))
+    const enB = todos.some(v => nb.includes(v) || v.includes(nb.split(' ')[0]))
+    if (enA && enB) return true
+  }
+  return false
+}
 
 // ── Detección de embalaje ─────────────────────────────────────────────────────
 interface InfoEmbalaje {
@@ -168,10 +250,22 @@ function emparejarProductos(
         continue
       }
 
-      // 3. Descripción — usa normalización mejorada con abreviaturas
+      // 3. Sinónimos regionales Colombia (ej: GULUPA = CURUBA REDONDA)
+      if (esSinonimo(pf.descripcion, pr.descripcion)) {
+        const sc = 0.88
+        if (!mejor || sc > mejor.par.score)
+          mejor = { idx: i, par: { pf, pr, criterio: 'descripcion', score: sc } }
+        continue
+      }
+
+      // 4. Descripción — usa normalización mejorada con abreviaturas
       const sc = similitud(pf.descripcion, pr.descripcion)
-      if (sc >= UMBRAL_DESC && (!mejor || sc > mejor.par.score)) {
-        mejor = { idx: i, par: { pf, pr, criterio: 'descripcion', score: sc } }
+      // Bonus: si las cantidades son idénticas y hay similitud media, aumentar confianza
+      const cantF = pf.cantidad, cantR = pr.cantidad
+      const bonusCantidad = Math.abs(cantF - cantR) < 0.01 && sc >= 0.30 ? 0.15 : 0
+      const scFinal = Math.min(1, sc + bonusCantidad)
+      if (scFinal >= UMBRAL_DESC && (!mejor || scFinal > mejor.par.score)) {
+        mejor = { idx: i, par: { pf, pr, criterio: 'descripcion', score: scFinal } }
       }
     }
 
@@ -410,6 +504,7 @@ export function compararFacturaConRecibo(
 
     // 8. Diferencia de presentación (emparejó por descripción, códigos distintos)
     if (criterio === 'descripcion' && pf.codigo && pr.codigo && limpiarEAN(pf.codigo) !== limpiarEAN(pr.codigo)) {
+      const esSin = esSinonimo(pf.descripcion, pr.descripcion)
       diferencias.push({
         tipoDiferencia: 'presentacion',
         codigoFactura: pf.codigo, codigoRecibo: pr.codigo,
@@ -417,7 +512,9 @@ export function compararFacturaConRecibo(
         cantidadFacturada: cantF, cantidadRecibida: cantR,
         precioFactura: precioF, precioRecibo: precioR,
         valorDiferenciaTotal: difNeta,
-        nota: `Producto emparejado por descripción con códigos distintos. EAN factura: ${pf.codigo} / EAN recibo: ${pr.codigo}. Verificar presentación (granel vs empaque). Valor neto: $${totalF.toLocaleString('es-CO')} vs $${totalR.toLocaleString('es-CO')}`,
+        nota: esSin
+          ? `🌿 Sinónimo regional: "${pf.descripcion}" (factura) = "${pr.descripcion}" (recibo). Mismo producto con nombre regional diferente. EAN factura: ${pf.codigo} / recibo: ${pr.codigo}. Valor: $${totalF.toLocaleString('es-CO')} vs $${totalR.toLocaleString('es-CO')}`
+          : `Producto emparejado por descripción con códigos distintos. EAN factura: ${pf.codigo} / recibo: ${pr.codigo}. Verificar presentación. Valor: $${totalF.toLocaleString('es-CO')} vs $${totalR.toLocaleString('es-CO')}`,
       })
     }
   }
