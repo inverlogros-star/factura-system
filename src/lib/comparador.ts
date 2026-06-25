@@ -619,6 +619,17 @@ export function compararFacturaConRecibo(
     }
   }
 
+  // Diferencias "reales" — excluir presentacion sin valor económico
+  // Si la única diferencia es presentacion (código distinto pero mismo producto/cantidad/precio)
+  // y el valor de la diferencia es 0, NO se considera diferencia real
+  const diferenciasReales = diferencias.filter(d => {
+    if (d.tipoDiferencia !== 'presentacion') return true
+    // Es presentacion: solo cuenta si hay diferencia de valor real
+    return Math.abs(d.valorDiferenciaTotal ?? 0) > TOLERANCIA
+  })
+
+  const hayDiferenciasReales = diferenciasReales.length > 0 || Math.abs(valorDiferenciaTotal) > TOLERANCIA
+
   return {
     id: `${factura.id}-${recibo.id}-${Date.now()}`,
     facturaId: factura.id,
@@ -627,12 +638,12 @@ export function compararFacturaConRecibo(
     numeroRecibo: recibo.numeroRecibo,
     proveedor: factura.proveedor || recibo.proveedor,
     fechaComparacion: new Date().toISOString(),
-    diferencias,
-    tieneDiferencias: diferencias.length > 0,
+    diferencias,  // conservar todas las diferencias para el informe
+    tieneDiferencias: hayDiferenciasReales,
     valorTotalFactura: factura.total,
     valorTotalRecibo: recibo.total,
     valorDiferenciaTotal,
-    estado: diferencias.length === 0 ? 'ok' : 'con_diferencias',
+    estado: hayDiferenciasReales ? 'con_diferencias' : 'ok',
     notaAjuste,
   } as ResultadoComparacion & { notaAjuste: NotaAjustePrecio | null }
 }
