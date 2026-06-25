@@ -373,6 +373,19 @@ export function compararFacturaConRecibo(
   const diferencias: Diferencia[] = []
   const { pares, soloFactura, soloRecibo } = emparejarProductos(factura, recibo)
 
+  // Compara dos valores teniendo en cuenta si la factura trae decimales
+  // Si la factura NO tiene decimales, se redondean ambos antes de comparar
+  function compararValor(valFactura: number, valRecibo: number): {
+    diferencia: number, usarDecimales: boolean
+  } {
+    const factTieneDecimales = Math.abs(valFactura - Math.round(valFactura)) > 0.005
+    if (!factTieneDecimales) {
+      // Factura es número entero → ignorar decimales del recibo
+      return { diferencia: Math.round(valFactura) - Math.round(valRecibo), usarDecimales: false }
+    }
+    return { diferencia: valFactura - valRecibo, usarDecimales: true }
+  }
+
   // --- Comparar cada par emparejado ---
   for (const { pf, pr, criterio } of pares) {
     // Detectar si la factura viene en embalaje (caja, sixpack, etc.)
@@ -400,9 +413,14 @@ export function compararFacturaConRecibo(
 
     const difNeta = totalF - totalR
 
-    // 1. Diferencia de cantidad (considerando embalaje)
-    if (Math.abs(cantF - cantR) > TOLERANCIA) {
-      const difCant = cantF - cantR
+    // Comparar cantidad y precio usando la regla de decimales
+    const cmpCant  = compararValor(cantF, cantR)
+    const cmpPrecio = compararValor(precioF, precioR)
+    const cmpIva    = compararValor(ivaF, ivaR)
+
+    // 1. Diferencia de cantidad (considerando embalaje y decimales)
+    if (Math.abs(cmpCant.diferencia) > TOLERANCIA) {
+      const difCant = cmpCant.diferencia
       // Verificar si existe nota crédito que justifique el faltante
       const nc = notasCredito.length > 0
         ? buscarNotaCredito(notasCredito, factura.nitProveedor, pf.codigo, pf.descripcion, difCant)
@@ -428,29 +446,30 @@ export function compararFacturaConRecibo(
       })
     }
 
-    // 2. Diferencia de precio unitario
-    if (Math.abs(precioF - precioR) > TOLERANCIA) {
+    // 2. Diferencia de precio unitario (respetando decimales de la factura)
+    if (Math.abs(cmpPrecio.diferencia) > TOLERANCIA) {
+      const difP = cmpPrecio.diferencia
       diferencias.push({
         tipoDiferencia: 'precio',
         codigoFactura: pf.codigo, codigoRecibo: pr.codigo,
         descripcion: pf.descripcion,
         cantidadFacturada: cantF, cantidadRecibida: cantR,
         precioFactura: precioF, precioRecibo: precioR,
-        valorDiferenciaUnitario: precioF - precioR,
-        valorDiferenciaTotal: (precioF - precioR) * cantF,
-        nota: `Precio unitario factura $${precioF.toLocaleString('es-CO')} ≠ recibo $${precioR.toLocaleString('es-CO')}. Diferencia: $${(precioF - precioR).toLocaleString('es-CO')} × ${cantF} uds = $${((precioF - precioR) * cantF).toLocaleString('es-CO')}`,
+        valorDiferenciaUnitario: difP,
+        valorDiferenciaTotal: difP * cantF,
+        nota: `Precio unitario factura $${precioF.toLocaleString('es-CO')} ≠ recibo $${precioR.toLocaleString('es-CO')}.${!cmpPrecio.usarDecimales ? ' (Factura sin decimales: se compara en enteros)' : ''} Diferencia: $${difP.toLocaleString('es-CO')} × ${cantF} uds = $${(difP * cantF).toLocaleString('es-CO')}`,
       })
     }
 
-    // 3. Diferencia IVA
-    if (Math.abs(ivaF - ivaR) > TOLERANCIA && (ivaF > 0 || ivaR > 0)) {
+    // 3. Diferencia IVA (respetando decimales de la factura)
+    if (Math.abs(cmpIva.diferencia) > TOLERANCIA && (ivaF > 0 || ivaR > 0)) {
       diferencias.push({
         tipoDiferencia: 'precio',
         codigoFactura: pf.codigo, codigoRecibo: pr.codigo,
         descripcion: `IVA — ${pf.descripcion}`,
         precioFactura: ivaF, precioRecibo: ivaR,
-        valorDiferenciaTotal: ivaF - ivaR,
-        nota: `IVA facturado $${ivaF.toLocaleString('es-CO')} ≠ IVA recibo $${ivaR.toLocaleString('es-CO')}. Diferencia: $${(ivaF - ivaR).toLocaleString('es-CO')}`,
+        valorDiferenciaTotal: cmpIva.diferencia,
+        nota: `IVA facturado $${ivaF.toLocaleString('es-CO')} ≠ IVA recibo $${ivaR.toLocaleString('es-CO')}.${!cmpIva.usarDecimales ? ' (Factura sin decimales)' : ''} Diferencia: $${cmpIva.diferencia.toLocaleString('es-CO')}`,
       })
     }
 
@@ -545,7 +564,9 @@ export function compararFacturaConRecibo(
     })
   }
 
-  const valorDiferenciaTotal = factura.total - recibo.total
+  // Diferencia total respetando decimales de la factura
+  const cmpTotal = compararValor(factura.total, recibo.total)
+  const valorDiferenciaTotal = cmpTotal.diferencia
 
   // --- Generar Nota de Ajuste si hay diferencia de totales ---
   let notaAjuste: NotaAjustePrecio | null = null
