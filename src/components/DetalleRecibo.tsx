@@ -39,9 +39,9 @@ export default function DetalleRecibo({ recibo, onClose }: { recibo: ReciboMerca
         <td style="padding:5px 6px;font-family:monospace;font-size:10px">${p.codigo || '—'}</td>
         <td style="padding:5px 6px;font-size:11px">${p.descripcion}</td>
         <td style="padding:5px 6px;text-align:right">${p.cantidad}</td>
-        <td style="padding:5px 6px;text-align:right">$${fmt(p.costoBruto)}</td>
+        <td style="padding:5px 6px;text-align:right">$${fmt(p.totalBruto ?? p.cantidad * p.costoBruto)}</td>
         <td style="padding:5px 6px;text-align:right;color:#c05000">${p.descuento > 0 ? `-$${fmt(p.descuento)}` : '—'}</td>
-        <td style="padding:5px 6px;text-align:right">$${fmt(p.precioUnitario)}</td>
+        <td style="padding:5px 6px;text-align:right">$${fmt(p.baseIva ?? (p.totalBruto - p.descuento))}</td>
         <td style="padding:5px 6px;text-align:right">${p.tasaIva > 0 ? p.tasaIva+'%' : '—'}</td>
         <td style="padding:5px 6px;text-align:right;color:#7c3aed">${fmtN(p.iva) ? '$'+fmt(p.iva) : '—'}</td>
         <td style="padding:5px 6px;text-align:right;color:#0369a1">${fmtN(p.iconsumo) ? '$'+fmt(p.iconsumo) : '—'}</td>
@@ -92,7 +92,7 @@ export default function DetalleRecibo({ recibo, onClose }: { recibo: ReciboMerca
 <table>
   <thead><tr>
     <th>Código</th><th>Descripción</th><th class="r">Cant.</th>
-    <th class="r">P. Bruto</th><th class="r">Descuento</th><th class="r">P. Neto</th>
+    <th class="r">P. Bruto (Cant×C.Unit)</th><th class="r">Descuento</th><th class="r">Base IVA</th>
     <th class="r">% IVA</th><th class="r">IVA</th>
     <th class="r">Impocons.</th><th class="r">IBUA</th><th class="r">ICUI</th>
     <th class="r">Total Neto</th>
@@ -172,7 +172,7 @@ export default function DetalleRecibo({ recibo, onClose }: { recibo: ReciboMerca
             <table className="w-full text-xs">
               <thead className="bg-gray-100">
                 <tr>
-                  {['Código', 'Descripción', 'Cant.', 'P. Bruto', 'Descuento', 'P. Neto', '%IVA', 'IVA', 'Impocons.', 'IBUA', 'ICUI', 'Total Neto'].map(h => (
+                  {['Código', 'Descripción', 'Cant.', 'P.Bruto (Cant×C.U)', 'Descuento', 'Base IVA', '%IVA', 'IVA', 'Impocons.', 'IBUA', 'ICUI', 'Total Neto'].map(h => (
                     <th key={h} className="text-left px-3 py-2.5 font-semibold text-gray-700 border-b whitespace-nowrap">{h}</th>
                   ))}
                 </tr>
@@ -183,11 +183,15 @@ export default function DetalleRecibo({ recibo, onClose }: { recibo: ReciboMerca
                     <td className="px-3 py-2 font-mono text-gray-600 whitespace-nowrap">{p.codigo || '—'}</td>
                     <td className="px-3 py-2 font-medium min-w-[180px]">{p.descripcion}</td>
                     <td className="px-3 py-2 text-right whitespace-nowrap">{p.cantidad}</td>
-                    <td className="px-3 py-2 text-right whitespace-nowrap">${fmt(p.costoBruto)}</td>
-                    <td className="px-3 py-2 text-right whitespace-nowrap text-orange-600">
-                      {p.descuento > 0 ? `-$${fmt(p.descuento)}` : '—'}
+                    <td className="px-3 py-2 text-right whitespace-nowrap">
+                      ${fmt((p as any).totalBruto ?? p.cantidad * ((p as any).costoBruto ?? 0))}
                     </td>
-                    <td className="px-3 py-2 text-right whitespace-nowrap">${fmt(p.precioUnitario)}</td>
+                    <td className="px-3 py-2 text-right whitespace-nowrap text-orange-600">
+                      {((p as any).descuento ?? 0) > 0 ? `-$${fmt((p as any).descuento)}` : '—'}
+                    </td>
+                    <td className="px-3 py-2 text-right whitespace-nowrap font-medium">
+                      ${fmt((p as any).baseIva ?? ((p as any).totalBruto - ((p as any).descuento || 0)))}
+                    </td>
                     <td className="px-3 py-2 text-right whitespace-nowrap text-gray-500">
                       {p.tasaIva > 0 ? `${p.tasaIva}%` : '—'}
                     </td>

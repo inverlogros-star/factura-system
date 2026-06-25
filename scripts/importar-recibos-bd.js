@@ -75,10 +75,16 @@ function construirRecibos(filas) {
     const icui        = parseFloat(fila.EntDet_ICUI       || 0)
     const estampillas = parseFloat(fila.EntDet_Estampillas|| 0)
     const otros       = parseFloat(fila.EntDet_Otros      || 0)
-    const totalBruto  = parseFloat(fila.EntDet_TotalBruto || (cantidad * costoBruto))
+    // P.Bruto = Cant × CostoBruto (unitario)
+    const totalBruto  = cantidad * costoBruto
     const totalNeto   = parseFloat(fila.EntDet_TotalNeto  || (cantidad * costoNeto))
-    // Calcular tasa IVA: 0, 5 o 19
-    const tasaIva     = totalBruto > 0 && iva > 0 ? Math.round((iva / totalBruto) * 100) : 0
+    // Base IVA = P.Bruto - Descuento
+    const baseIva     = totalBruto - descuento
+    // Tasa IVA desde la BD, redondeada a 0, 5 o 19
+    const tasaIvaDB   = baseIva > 0 && iva > 0 ? (iva / baseIva) * 100 : 0
+    const tasaIva     = tasaIvaDB > 15 ? 19 : tasaIvaDB > 3 ? 5 : 0
+    // Recalcular IVA = Base × Tasa
+    const ivaCalc     = baseIva * (tasaIva / 100)
 
     if (!numRecibo) continue
 
@@ -116,11 +122,13 @@ function construirRecibos(filas) {
         codigo,
         descripcion,
         cantidad,
-        costoBruto,
+        costoBruto,          // precio unitario bruto
+        totalBruto,          // Cant × CostoBruto
         precioUnitario: costoNeto,
-        descuento,
+        descuento,           // descuento total de la línea
+        baseIva,             // P.Bruto - Descuento (base para calcular IVA)
         subtotal: totalNeto,
-        iva,
+        iva: ivaCalc,        // Base × tasaIva%
         tasaIva,
         iconsumo,
         ibua,
@@ -139,8 +147,8 @@ function construirRecibos(filas) {
     // Calcular totales de impuestos sumando las líneas de productos
     const prods = recibo.productos
     recibo.totales = {
-      bruto:        prods.reduce((s, p) => s + (p.costoBruto || 0) * p.cantidad, 0),
-      descuentos:   prods.reduce((s, p) => s + (p.descuento || 0), 0),
+      bruto:        prods.reduce((s, p) => s + (p.totalBruto || 0), 0),
+      descuentos:   prods.reduce((s, p) => s + (p.descuento  || 0), 0),
       subtotalNeto: prods.reduce((s, p) => s + p.subtotal, 0),
       iva:          prods.reduce((s, p) => s + (p.iva || 0), 0),
       iconsumo:     prods.reduce((s, p) => s + (p.iconsumo || 0), 0),
