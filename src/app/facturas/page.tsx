@@ -115,30 +115,6 @@ export default function FacturasPage() {
           onChange={e => handleArchivos(e.target.files)} />
       </div>
 
-      {/* Barra de búsqueda */}
-      <div className="flex gap-3 items-center">
-        <div className="relative flex-1 max-w-sm">
-          <Search size={15} className="absolute left-3 top-2.5 text-gray-400" />
-          <input
-            type="text"
-            placeholder="Buscar por proveedor o NIT..."
-            value={busqueda}
-            onChange={e => setBusqueda(e.target.value)}
-            className="w-full pl-9 pr-8 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-300 bg-white"
-          />
-          {busqueda && (
-            <button onClick={() => setBusqueda('')} className="absolute right-2.5 top-2.5 text-gray-400 hover:text-gray-600">
-              <X size={15} />
-            </button>
-          )}
-        </div>
-        {busqueda && (
-          <span className="text-sm text-gray-500">
-            {facturasFiltradas.length} resultado(s) de {facturas.length}
-          </span>
-        )}
-      </div>
-
       {/* Filtros por tipo */}
       <div className="flex gap-2 flex-wrap">
         {[['todos', 'Todos', facturas.length], ...Object.entries(conteos).map(([k, v]) => [k, TIPO_LABEL[k] || k, v])].map(([tipo, label, count]) => (
@@ -159,10 +135,30 @@ export default function FacturasPage() {
         </Card>
       ) : (
         <Card>
-          <CardHeader>
-            <CardTitle className="text-base">{facturasFiltradas.length} documento(s)
-              {marcadas.size > 0 && <span className="ml-2 text-sm font-normal text-blue-600">— {marcadas.size} seleccionado(s)</span>}
-            </CardTitle>
+          <CardHeader className="pb-3">
+            <div className="flex items-center justify-between gap-4 flex-wrap">
+              <CardTitle className="text-base">
+                {facturasFiltradas.length} documento(s)
+                {marcadas.size > 0 && <span className="ml-2 text-sm font-normal text-blue-600">— {marcadas.size} seleccionado(s)</span>}
+                {busqueda && <span className="ml-2 text-sm font-normal text-gray-400">de {facturas.length} total</span>}
+              </CardTitle>
+              {/* Barra de búsqueda dentro del card */}
+              <div className="relative min-w-[280px]">
+                <Search size={14} className="absolute left-3 top-2.5 text-gray-400" />
+                <input
+                  type="text"
+                  placeholder="Buscar proveedor, NIT o No. factura..."
+                  value={busqueda}
+                  onChange={e => setBusqueda(e.target.value)}
+                  className="w-full pl-8 pr-7 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-300 bg-gray-50"
+                />
+                {busqueda && (
+                  <button onClick={() => setBusqueda('')} className="absolute right-2.5 top-2.5 text-gray-400 hover:text-gray-600">
+                    <X size={14} />
+                  </button>
+                )}
+              </div>
+            </div>
           </CardHeader>
           <CardContent className="p-0">
             <table className="w-full text-sm">

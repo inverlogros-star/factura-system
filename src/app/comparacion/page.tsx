@@ -3,7 +3,7 @@ import { useEffect, useState, useMemo } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { GitCompareArrows, ChevronDown, ChevronUp, FileDown, Trash2, CheckSquare, Square, Eye, AlertTriangle, CheckCircle2, Search, FileWarning } from 'lucide-react'
+import { GitCompareArrows, ChevronDown, ChevronUp, FileDown, Trash2, CheckSquare, Square, Eye, AlertTriangle, CheckCircle2, Search, FileWarning, X } from 'lucide-react'
 import { storeFacturas, storeRecibos, storeComparaciones } from '@/lib/store'
 import { compararFacturaConRecibo, encontrarReciboPorFactura, ultimos4Digitos } from '@/lib/comparador'
 import { generarInformePDF } from '@/lib/informe-pdf'
@@ -229,22 +229,6 @@ export default function ComparacionPage() {
           </p>
         </div>
         <div className="flex gap-2 items-center">
-          <div className="relative">
-            <Search size={14} className="absolute left-3 top-2.5 text-gray-400" />
-            <input type="text" placeholder="Proveedor, NIT o No. Factura..."
-              value={busqueda} onChange={e => setBusqueda(e.target.value)}
-              className="pl-8 pr-8 py-2 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-300 w-64" />
-            {busqueda && (
-              <button onClick={() => setBusqueda('')} className="absolute right-2.5 top-2.5 text-gray-400 hover:text-gray-600">
-                <span className="text-xs">✕</span>
-              </button>
-            )}
-          </div>
-          {busqueda && (
-            <span className="text-xs text-gray-500 whitespace-nowrap">
-              {facturasFiltradas.length} / {facturas.length}
-            </span>
-          )}
           {seleccionadas.size > 0 && (
             <Button onClick={compararSeleccionadas} disabled={procesando}>
               <GitCompareArrows size={15} className="mr-1.5" />
@@ -274,14 +258,31 @@ export default function ComparacionPage() {
       {/* ── TABLA PRINCIPAL: documentos a comparar ── */}
       <Card>
         <CardHeader className="pb-3">
-          <div className="flex items-center justify-between">
+          <div className="flex items-center justify-between gap-3 flex-wrap">
             <CardTitle className="text-base">
               Facturas cargadas ({facturasFiltradas.length})
+              {busqueda && <span className="ml-2 text-sm font-normal text-gray-400">de {facturas.length} total</span>}
             </CardTitle>
-            <div className="flex items-center gap-2 text-xs text-gray-500">
-              <span className="flex items-center gap-1"><CheckSquare size={12} className="text-blue-600" /> Selecciona pendientes y compara</span>
+            {/* Barra de búsqueda dentro del card */}
+            <div className="relative min-w-[300px]">
+              <Search size={14} className="absolute left-3 top-2.5 text-gray-400" />
+              <input
+                type="text"
+                placeholder="Buscar proveedor, NIT o No. factura..."
+                value={busqueda}
+                onChange={e => setBusqueda(e.target.value)}
+                className="w-full pl-8 pr-7 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-300 bg-gray-50"
+              />
+              {busqueda && (
+                <button onClick={() => setBusqueda('')} className="absolute right-2.5 top-2.5 text-gray-400 hover:text-gray-600">
+                  <X size={14} />
+                </button>
+              )}
             </div>
           </div>
+          <p className="text-xs text-gray-400 mt-1 flex items-center gap-1">
+            <CheckSquare size={11} className="text-blue-500" /> Marca las facturas pendientes con recibo detectado y haz clic en Comparar
+          </p>
         </CardHeader>
         <CardContent className="p-0">
           {facturasFiltradas.length === 0 ? (
