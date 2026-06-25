@@ -1,23 +1,24 @@
 'use client'
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useMemo } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { GitCompareArrows, ChevronDown, ChevronUp, FileDown, CheckSquare, Square, Trash2 } from 'lucide-react'
+import { GitCompareArrows, ChevronDown, ChevronUp, FileDown, Trash2, CheckSquare, Square, Eye, AlertTriangle, CheckCircle2, Search } from 'lucide-react'
 import { storeFacturas, storeRecibos, storeComparaciones } from '@/lib/store'
 import { compararFacturaConRecibo, encontrarReciboPorFactura, ultimos4Digitos } from '@/lib/comparador'
 import { generarInformePDF } from '@/lib/informe-pdf'
 import type { Factura, ReciboMercancia, ResultadoComparacion, TipoDiferencia } from '@/types'
 import { toast } from 'sonner'
 
-const TIPO_LABEL: Record<TipoDiferencia, string> = {
-  cantidad: 'Cantidad',
-  precio: 'Precio',
-  codigo_producto: 'Código',
-  presentacion: 'Presentación diferente',
-  producto_no_encontrado: 'Producto no encontrado',
+function fmt(n: number) {
+  return Number(n || 0).toLocaleString('es-CO', { minimumFractionDigits: 0, maximumFractionDigits: 0 })
 }
 
+const TIPO_LABEL: Record<TipoDiferencia, string> = {
+  cantidad: 'Cantidad', precio: 'Precio',
+  codigo_producto: 'Código', presentacion: 'Presentación',
+  producto_no_encontrado: 'No encontrado',
+}
 const TIPO_COLOR: Record<TipoDiferencia, string> = {
   cantidad: 'bg-yellow-50 border-yellow-200 text-yellow-800',
   precio: 'bg-orange-50 border-orange-200 text-orange-800',
@@ -25,316 +26,327 @@ const TIPO_COLOR: Record<TipoDiferencia, string> = {
   presentacion: 'bg-purple-50 border-purple-200 text-purple-800',
   producto_no_encontrado: 'bg-red-50 border-red-200 text-red-800',
 }
+const ESTADO_COLOR: Record<string, string> = {
+  pendiente: 'bg-yellow-100 text-yellow-800',
+  conciliada: 'bg-green-100 text-green-800',
+  con_diferencias: 'bg-red-100 text-red-800',
+  rechazada: 'bg-gray-100 text-gray-500',
+}
 
-function ResultadoCard({
-  resultado,
-  factura,
-  onEliminar,
-}: {
+// Panel de diferencias detalladas
+function PanelDiferencias({ resultado, factura, onClose, onEliminar }: {
   resultado: ResultadoComparacion
   factura: Factura
-  onEliminar: (id: string, facturaId: string) => void
+  onClose: () => void
+  onEliminar: () => void
 }) {
-  const [expandido, setExpandido] = useState(false)
-
   async function descargarPDF() {
-    try {
-      await generarInformePDF(resultado, factura)
-      toast.success('Informe PDF generado')
-    } catch (err) {
-      toast.error(`Error al generar PDF: ${(err as Error).message}`)
-    }
+    try { await generarInformePDF(resultado, factura); toast.success('PDF generado') }
+    catch (e) { toast.error(`Error: ${(e as Error).message}`) }
   }
 
   return (
-    <Card className={resultado.tieneDiferencias ? 'border-red-200' : 'border-green-200'}>
-      <CardHeader className="pb-3">
-        <div className="flex items-center justify-between">
-          <div>
-            <CardTitle className="text-base">
-              Factura {resultado.numeroFactura}
-              <span className="ml-2 text-sm font-normal text-gray-400">
-                (últimos 4: <code className="bg-gray-100 px-1 rounded">{resultado.numeroFactura.slice(-4)}</code>)
-              </span>
-              <span className="mx-2 text-gray-300">↔</span>
-              Recibo {resultado.numeroRecibo}
-            </CardTitle>
-            <p className="text-sm text-gray-500">{resultado.proveedor}</p>
-          </div>
-          <div className="flex items-center gap-2">
-            {resultado.tieneDiferencias
-              ? <Badge variant="destructive">{resultado.diferencias.length} diferencia(s)</Badge>
-              : <Badge className="bg-green-100 text-green-800">Sin diferencias</Badge>}
-            <Button size="sm" variant="outline" onClick={descargarPDF}>
-              <FileDown size={14} className="mr-1" /> PDF
-            </Button>
-            <Button
-              size="sm"
-              variant="ghost"
-              onClick={() => onEliminar(resultado.id, resultado.facturaId)}
-              title="Eliminar comparación y volver a pendiente"
-            >
-              <Trash2 size={14} className="text-red-500" />
-            </Button>
-            <Button size="sm" variant="ghost" onClick={() => setExpandido(e => !e)}>
-              {expandido ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
-            </Button>
-          </div>
+    <div className="fixed inset-0 z-50 flex flex-col bg-white">
+      <div className="flex items-center justify-between px-8 py-4 border-b bg-white shrink-0">
+        <div>
+          <h2 className="text-xl font-bold text-gray-900">
+            Comparación: {resultado.numeroFactura} ↔ Recibo {resultado.numeroRecibo}
+          </h2>
+          <p className="text-sm text-gray-500">{resultado.proveedor}</p>
         </div>
+        <div className="flex items-center gap-3">
+          {resultado.tieneDiferencias
+            ? <Badge variant="destructive">{resultado.diferencias.length} diferencia(s)</Badge>
+            : <Badge className="bg-green-100 text-green-800">Sin diferencias ✓</Badge>}
+          <Button variant="outline" onClick={descargarPDF}><FileDown size={15} className="mr-1.5" /> PDF</Button>
+          <Button variant="ghost" onClick={onEliminar}><Trash2 size={15} className="text-red-500" /></Button>
+          <button onClick={onClose} className="p-2 rounded-full hover:bg-gray-100">✕</button>
+        </div>
+      </div>
 
-        <div className="grid grid-cols-3 gap-3 mt-2 text-xs">
-          <div className="bg-gray-50 p-2 rounded">
-            <p className="text-gray-500">Total Factura (con IVA)</p>
-            <p className="font-bold">${Number(resultado.valorTotalFactura).toLocaleString('es-CO')}</p>
+      <div className="flex-1 overflow-auto p-8 bg-gray-50 space-y-6">
+        {/* Resumen numérico */}
+        <div className="grid grid-cols-3 gap-4">
+          <div className="bg-white rounded-lg border p-4 text-center">
+            <p className="text-xs text-gray-500 mb-1">Total Factura (con IVA)</p>
+            <p className="text-2xl font-bold text-blue-700">${fmt(resultado.valorTotalFactura)}</p>
           </div>
-          <div className="bg-gray-50 p-2 rounded">
-            <p className="text-gray-500">Total Recibo</p>
-            <p className="font-bold">${Number(resultado.valorTotalRecibo).toLocaleString('es-CO')}</p>
+          <div className="bg-white rounded-lg border p-4 text-center">
+            <p className="text-xs text-gray-500 mb-1">Total Recibo</p>
+            <p className="text-2xl font-bold text-green-700">${fmt(resultado.valorTotalRecibo)}</p>
           </div>
-          <div className={`p-2 rounded ${resultado.valorDiferenciaTotal === 0 ? 'bg-green-50' : 'bg-red-50'}`}>
-            <p className="text-gray-500">Diferencia Total</p>
-            <p className={`font-bold ${resultado.valorDiferenciaTotal === 0 ? 'text-green-700' : 'text-red-700'}`}>
-              ${Number(resultado.valorDiferenciaTotal).toLocaleString('es-CO')}
+          <div className={`rounded-lg border p-4 text-center ${resultado.valorDiferenciaTotal === 0 ? 'bg-green-50 border-green-200' : 'bg-red-50 border-red-200'}`}>
+            <p className="text-xs text-gray-500 mb-1">Diferencia</p>
+            <p className={`text-2xl font-bold ${resultado.valorDiferenciaTotal === 0 ? 'text-green-700' : 'text-red-700'}`}>
+              ${fmt(resultado.valorDiferenciaTotal)}
             </p>
           </div>
         </div>
-      </CardHeader>
 
-      {expandido && resultado.diferencias.length > 0 && (
-        <CardContent className="pt-0 space-y-3">
-          <h4 className="text-sm font-semibold text-gray-700">Detalle de diferencias por código</h4>
-          {resultado.diferencias.map((d, i) => (
-            <div key={i} className={`border rounded-lg p-3 text-xs ${TIPO_COLOR[d.tipoDiferencia]}`}>
-              <div className="flex items-center justify-between mb-1">
-                <span className="font-semibold">{TIPO_LABEL[d.tipoDiferencia]}</span>
-                {d.valorDiferenciaTotal !== undefined && (
-                  <span className="font-bold">Δ ${Number(d.valorDiferenciaTotal).toLocaleString('es-CO')}</span>
-                )}
+        {/* Diferencias por producto */}
+        {resultado.diferencias.length === 0 ? (
+          <div className="bg-green-50 border border-green-200 rounded-lg p-8 text-center">
+            <CheckCircle2 size={48} className="mx-auto text-green-500 mb-3" />
+            <p className="text-green-700 font-semibold text-lg">Sin diferencias — documentos conciliados</p>
+          </div>
+        ) : (
+          <div className="space-y-3">
+            <h3 className="font-semibold text-gray-700">Diferencias por producto ({resultado.diferencias.length})</h3>
+            {resultado.diferencias.map((d, i) => (
+              <div key={i} className={`border rounded-lg p-4 ${TIPO_COLOR[d.tipoDiferencia]}`}>
+                <div className="flex items-center justify-between mb-2">
+                  <div className="flex items-center gap-3">
+                    <span className="font-bold text-sm">{TIPO_LABEL[d.tipoDiferencia]}</span>
+                    <span className="font-medium">{d.descripcion}</span>
+                  </div>
+                  {d.valorDiferenciaTotal !== undefined && (
+                    <span className="font-bold">Δ ${fmt(d.valorDiferenciaTotal)}</span>
+                  )}
+                </div>
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-xs opacity-80 mb-2">
+                  {d.codigoRecibo && <span>Cód. recibo: <code className="bg-white/50 px-1">{d.codigoRecibo}</code></span>}
+                  {d.codigoFactura && <span>Cód. factura: <code className="bg-white/50 px-1">{d.codigoFactura}</code></span>}
+                  {d.cantidadRecibida !== undefined && <span>Cant. recibida: <b>{d.cantidadRecibida}</b></span>}
+                  {d.cantidadFacturada !== undefined && <span>Cant. facturada: <b>{d.cantidadFacturada}</b></span>}
+                  {d.precioRecibo !== undefined && <span>Precio recibo: ${fmt(d.precioRecibo)}</span>}
+                  {d.precioFactura !== undefined && <span>Precio factura: ${fmt(d.precioFactura)}</span>}
+                </div>
+                <div className="bg-white/60 rounded p-2 text-xs border border-current/20">
+                  <span className="font-semibold">Nota: </span>{d.nota}
+                </div>
               </div>
-              <p className="font-medium mb-1">{d.descripcion}</p>
-              <div className="grid grid-cols-2 gap-2 opacity-80 mb-2">
-                {d.codigoRecibo && <span>Cód. recibo: <code className="bg-white/50 px-1">{d.codigoRecibo}</code></span>}
-                {d.codigoFactura && <span>Cód. factura: <code className="bg-white/50 px-1">{d.codigoFactura}</code></span>}
-                {d.cantidadRecibida !== undefined && <span>Cant. recibida: <b>{d.cantidadRecibida}</b></span>}
-                {d.cantidadFacturada !== undefined && <span>Cant. facturada: <b>{d.cantidadFacturada}</b></span>}
-                {d.precioRecibo !== undefined && <span>Precio recibo: ${d.precioRecibo}</span>}
-                {d.precioFactura !== undefined && <span>Precio factura: ${d.precioFactura}</span>}
-              </div>
-              <div className="bg-white/60 rounded p-2 border border-current/20">
-                <p className="font-semibold mb-0.5">Nota:</p>
-                <p>{d.nota}</p>
-              </div>
-            </div>
-          ))}
-        </CardContent>
-      )}
-    </Card>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
   )
 }
 
 export default function ComparacionPage() {
-  const [facturas, setFacturas] = useState<Factura[]>([])
-  const [recibos, setRecibos] = useState<ReciboMercancia[]>([])
-  const [resultados, setResultados] = useState<ResultadoComparacion[]>([])
+  const [facturas, setFacturas]       = useState<Factura[]>([])
+  const [recibos, setRecibos]         = useState<ReciboMercancia[]>([])
+  const [resultados, setResultados]   = useState<ResultadoComparacion[]>([])
   const [seleccionadas, setSeleccionadas] = useState<Set<string>>(new Set())
-  const [procesando, setProcesando] = useState(false)
+  const [procesando, setProcesando]   = useState(false)
   const [facturasMap, setFacturasMap] = useState<Record<string, Factura>>({})
+  const [busqueda, setBusqueda]       = useState('')
+  const [panelAbierto, setPanelAbierto] = useState<ResultadoComparacion | null>(null)
 
   const recargar = async () => {
-    const [fs, rs, cs] = await Promise.all([
-      storeFacturas.getAll(),
-      storeRecibos.getAll(),
-      storeComparaciones.getAll(),
-    ])
-    setFacturas(fs)
-    setRecibos(rs)
-    setResultados(cs)
+    const [fs, rs, cs] = await Promise.all([storeFacturas.getAll(), storeRecibos.getAll(), storeComparaciones.getAll()])
+    setFacturas(fs); setRecibos(rs); setResultados(cs)
     setFacturasMap(Object.fromEntries(fs.map(f => [f.id, f])))
   }
   useEffect(() => { recargar() }, [])
 
   function toggleFactura(id: string) {
-    setSeleccionadas(prev => {
-      const next = new Set(prev)
-      next.has(id) ? next.delete(id) : next.add(id)
-      return next
-    })
+    setSeleccionadas(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n })
   }
-
   function toggleTodas() {
-    if (seleccionadas.size === facturas.length) {
-      setSeleccionadas(new Set())
-    } else {
-      setSeleccionadas(new Set(facturas.map(f => f.id)))
-    }
-  }
-
-  async function eliminarComparacion(comparacionId: string, facturaId: string) {
-    await storeComparaciones.delete(comparacionId)
-    // Resetear la factura a pendiente para poder volver a compararla
-    const factura = facturasMap[facturaId]
-    if (factura) {
-      await storeFacturas.save({ ...factura, estado: 'pendiente', reciboAsociadoId: undefined })
-    }
-    await recargar()
-    toast.success('Comparación eliminada — factura vuelve a estado pendiente')
+    const pendientes = facturasFiltradas.filter(f => f.estado === 'pendiente')
+    const idsPendientes = new Set(pendientes.map(f => f.id))
+    const todasMarcadas = pendientes.every(f => seleccionadas.has(f.id))
+    setSeleccionadas(todasMarcadas ? new Set() : idsPendientes)
   }
 
   async function compararSeleccionadas() {
     if (seleccionadas.size === 0) { toast.error('Selecciona al menos una factura'); return }
     setProcesando(true)
     let procesadas = 0, sinRecibo = 0
-
-    for (const facturaId of seleccionadas) {
-      const factura = facturas.find(f => f.id === facturaId)
+    for (const id of seleccionadas) {
+      const factura = facturas.find(f => f.id === id)
       if (!factura) continue
       const recibo = encontrarReciboPorFactura(factura, recibos)
       if (!recibo) { sinRecibo++; continue }
-
       const resultado = compararFacturaConRecibo(factura, recibo)
       await storeComparaciones.save(resultado)
-      await storeFacturas.save({
-        ...factura,
-        estado: resultado.tieneDiferencias ? 'con_diferencias' : 'conciliada',
-        reciboAsociadoId: recibo.id,
-      })
+      await storeFacturas.save({ ...factura, estado: resultado.tieneDiferencias ? 'con_diferencias' : 'conciliada', reciboAsociadoId: recibo.id })
       procesadas++
     }
-
-    await recargar()
-    setSeleccionadas(new Set())
-    setProcesando(false)
+    await recargar(); setSeleccionadas(new Set()); setProcesando(false)
     if (procesadas > 0) toast.success(`${procesadas} factura(s) comparada(s)`)
-    if (sinRecibo > 0) toast.warning(`${sinRecibo} factura(s) sin recibo asociado — quedan pendientes`)
+    if (sinRecibo > 0) toast.warning(`${sinRecibo} sin recibo asociado`)
   }
 
-  const todasSeleccionadas = facturas.length > 0 && seleccionadas.size === facturas.length
-  const algunaSeleccionada = seleccionadas.size > 0
-
-  const ESTADO_COLOR: Record<string, string> = {
-    pendiente: 'bg-yellow-100 text-yellow-800',
-    conciliada: 'bg-green-100 text-green-800',
-    con_diferencias: 'bg-red-100 text-red-800',
-    rechazada: 'bg-gray-100 text-gray-600',
+  async function eliminarComparacion(comparacionId: string, facturaId: string) {
+    await storeComparaciones.delete(comparacionId)
+    const factura = facturasMap[facturaId]
+    if (factura) await storeFacturas.save({ ...factura, estado: 'pendiente', reciboAsociadoId: undefined })
+    await recargar(); setPanelAbierto(null)
+    toast.success('Comparación eliminada — factura vuelve a Pendiente')
   }
+
+  // Filtrar y separar facturas con/sin recibo
+  const facturasFiltradas = useMemo(() => {
+    const q = busqueda.toLowerCase()
+    return facturas.filter(f =>
+      !q || f.numeroFactura.toLowerCase().includes(q) || (f.proveedor || '').toLowerCase().includes(q)
+    )
+  }, [facturas, busqueda])
+
+  const conRecibo    = facturasFiltradas.filter(f => encontrarReciboPorFactura(f, recibos))
+  const sinRecibo    = facturasFiltradas.filter(f => !encontrarReciboPorFactura(f, recibos))
+  const yaComparadas = resultados.length
+
+  // Mapa de resultados por facturaId para acceso rápido
+  const resultadosPorFactura = useMemo(() =>
+    Object.fromEntries(resultados.map(r => [r.facturaId, r])), [resultados])
 
   return (
-    <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold text-gray-900">Comparación</h1>
-        <p className="text-gray-500 text-sm mt-1">
-          Selecciona las facturas a comparar — se busca el recibo por los últimos 4 dígitos
-        </p>
+    <div className="space-y-5">
+      {/* Encabezado */}
+      <div className="flex items-center justify-between flex-wrap gap-3">
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900">Comparación de Documentos</h1>
+          <p className="text-gray-500 text-sm mt-1">
+            Coteja facturas DIAN con recibos de mercancía usando los últimos 4 dígitos
+          </p>
+        </div>
+        <div className="flex gap-2 items-center">
+          <div className="relative">
+            <Search size={14} className="absolute left-3 top-2.5 text-gray-400" />
+            <input type="text" placeholder="Buscar factura o proveedor..."
+              value={busqueda} onChange={e => setBusqueda(e.target.value)}
+              className="pl-8 pr-3 py-2 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-300 w-56" />
+          </div>
+          {seleccionadas.size > 0 && (
+            <Button onClick={compararSeleccionadas} disabled={procesando}>
+              <GitCompareArrows size={15} className="mr-1.5" />
+              {procesando ? 'Comparando...' : `Comparar (${seleccionadas.size})`}
+            </Button>
+          )}
+        </div>
       </div>
 
-      {/* Tabla de facturas con checkboxes */}
+      {/* Resumen estadístico */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+        {[
+          { label: 'Total facturas',  value: facturas.length,  color: 'text-gray-700' },
+          { label: 'Con recibo',      value: conRecibo.length, color: 'text-green-700' },
+          { label: 'Sin recibo',      value: sinRecibo.length, color: 'text-yellow-700' },
+          { label: 'Comparadas',      value: yaComparadas,     color: 'text-blue-700' },
+        ].map(({ label, value, color }) => (
+          <Card key={label}>
+            <CardContent className="p-4 text-center">
+              <p className={`text-2xl font-bold ${color}`}>{value}</p>
+              <p className="text-xs text-gray-500">{label}</p>
+            </CardContent>
+          </Card>
+        ))}
+      </div>
+
+      {/* ── TABLA PRINCIPAL: documentos a comparar ── */}
       <Card>
         <CardHeader className="pb-3">
           <div className="flex items-center justify-between">
             <CardTitle className="text-base">
-              Facturas cargadas ({facturas.length})
+              Facturas cargadas ({facturasFiltradas.length})
             </CardTitle>
-            <div className="flex gap-2">
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={compararSeleccionadas}
-                disabled={!algunaSeleccionada || procesando}
-              >
-                <GitCompareArrows size={15} className="mr-1.5" />
-                {procesando ? 'Comparando...' : `Comparar ${algunaSeleccionada ? `(${seleccionadas.size})` : ''}`}
-              </Button>
+            <div className="flex items-center gap-2 text-xs text-gray-500">
+              <span className="flex items-center gap-1"><CheckSquare size={12} className="text-blue-600" /> Selecciona pendientes y compara</span>
             </div>
           </div>
         </CardHeader>
         <CardContent className="p-0">
-          {facturas.length === 0 ? (
-            <p className="text-center text-gray-400 py-10 text-sm">
-              No hay facturas cargadas. Ve a Facturas y sube archivos XML.
-            </p>
+          {facturasFiltradas.length === 0 ? (
+            <p className="text-center text-gray-400 py-10 text-sm">No hay facturas. Ve a Facturas y sube archivos XML.</p>
           ) : (
-            <table className="w-full text-sm">
-              <thead className="bg-gray-50 border-b">
-                <tr>
-                  <th className="px-4 py-3 w-10">
-                    <button onClick={toggleTodas} className="flex items-center justify-center text-blue-600">
-                      {todasSeleccionadas
-                        ? <CheckSquare size={18} />
-                        : <Square size={18} className="text-gray-400" />}
-                    </button>
-                  </th>
-                  {['No. Factura', 'Últ. 4 dígitos', 'Proveedor', 'Fecha', 'Total Factura', 'Estado', 'Recibo detectado', 'Total Recibo'].map(h => (
-                    <th key={h} className="text-left px-3 py-3 font-medium text-gray-600">{h}</th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-100">
-                {facturas.map(f => {
-                  const recibo = encontrarReciboPorFactura(f, recibos)
-                  const checked = seleccionadas.has(f.id)
-                  return (
-                    <tr
-                      key={f.id}
-                      className={`cursor-pointer transition-colors ${checked ? 'bg-blue-50' : 'hover:bg-gray-50'}`}
-                      onClick={() => toggleFactura(f.id)}
-                    >
-                      <td className="px-4 py-3">
-                        <div className="flex items-center justify-center text-blue-600">
-                          {checked ? <CheckSquare size={18} /> : <Square size={18} className="text-gray-300" />}
-                        </div>
-                      </td>
-                      <td className="px-3 py-3 font-mono font-medium text-sm">{f.numeroFactura}</td>
-                      <td className="px-3 py-3">
-                        <span className="bg-blue-100 text-blue-800 font-bold font-mono px-2 py-0.5 rounded text-xs">
-                          {ultimos4Digitos(f.numeroFactura)}
-                        </span>
-                      </td>
-                      <td className="px-3 py-3">{f.proveedor || '—'}</td>
-                      <td className="px-3 py-3 text-gray-500">{f.fecha}</td>
-                      <td className="px-3 py-3 font-medium">${Number(f.total).toLocaleString('es-CO')}</td>
-                      <td className="px-3 py-3">
-                        <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${ESTADO_COLOR[f.estado]}`}>
-                          {f.estado.replace('_', ' ')}
-                        </span>
-                      </td>
-                      <td className="px-3 py-3 text-xs">
-                        {recibo
-                          ? <span className="text-green-700 font-medium">✓ {recibo.numeroRecibo}</span>
-                          : <span className="text-red-500">Sin recibo</span>}
-                      </td>
-                      <td className="px-3 py-3 font-medium">
-                        {recibo
-                          ? <span className="text-green-700">${Number(recibo.total).toLocaleString('es-CO')}</span>
-                          : <span className="text-gray-300">—</span>}
-                      </td>
-                    </tr>
-                  )
-                })}
-              </tbody>
-            </table>
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead className="bg-gray-50 border-b">
+                  <tr>
+                    <th className="px-4 py-3 w-10">
+                      <button onClick={toggleTodas} className="text-blue-600">
+                        {conRecibo.filter(f => seleccionadas.has(f.id)).length === conRecibo.filter(f => f.estado === 'pendiente').length && conRecibo.filter(f => f.estado === 'pendiente').length > 0
+                          ? <CheckSquare size={17} /> : <Square size={17} className="text-gray-400" />}
+                      </button>
+                    </th>
+                    {['No. Factura','Últ. 4','Proveedor','Fecha','Total Factura','Estado','Recibo asociado','Total Recibo','Resultado',''].map(h => (
+                      <th key={h} className="text-left px-3 py-3 font-medium text-gray-600 whitespace-nowrap">{h}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-100">
+                  {facturasFiltradas.map(f => {
+                    const recibo    = encontrarReciboPorFactura(f, recibos)
+                    const checked   = seleccionadas.has(f.id)
+                    const resultado = resultadosPorFactura[f.id]
+                    const puedeSeleccionar = f.estado === 'pendiente' && !!recibo
+
+                    return (
+                      <tr key={f.id}
+                        className={`transition-colors ${checked ? 'bg-blue-50' : 'hover:bg-gray-50'} ${puedeSeleccionar ? 'cursor-pointer' : ''}`}
+                        onClick={() => puedeSeleccionar && toggleFactura(f.id)}>
+
+                        <td className="px-4 py-3">
+                          {puedeSeleccionar
+                            ? checked ? <CheckSquare size={17} className="text-blue-600" /> : <Square size={17} className="text-gray-300" />
+                            : <span className="w-4 h-4 block" />}
+                        </td>
+                        <td className="px-3 py-3 font-mono font-medium text-sm">{f.numeroFactura}</td>
+                        <td className="px-3 py-3">
+                          <span className="bg-blue-100 text-blue-800 font-bold font-mono px-2 py-0.5 rounded text-xs">
+                            {ultimos4Digitos(f.numeroFactura)}
+                          </span>
+                        </td>
+                        <td className="px-3 py-3 text-gray-700 max-w-[180px] truncate">{f.proveedor || '—'}</td>
+                        <td className="px-3 py-3 text-gray-500 whitespace-nowrap">{f.fecha}</td>
+                        <td className="px-3 py-3 font-medium whitespace-nowrap">${fmt(f.total)}</td>
+                        <td className="px-3 py-3">
+                          <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${ESTADO_COLOR[f.estado]}`}>
+                            {f.estado.replace('_', ' ')}
+                          </span>
+                        </td>
+                        <td className="px-3 py-3 text-xs whitespace-nowrap">
+                          {recibo
+                            ? <span className="text-green-700 font-medium flex items-center gap-1">
+                                <CheckCircle2 size={13} /> {recibo.numeroRecibo}
+                                {recibo.numeroFacturaProveedor && (
+                                  <span className="bg-green-100 text-green-700 font-mono px-1 rounded ml-1">
+                                    {recibo.numeroFacturaProveedor}
+                                  </span>
+                                )}
+                              </span>
+                            : <span className="text-gray-400 flex items-center gap-1"><AlertTriangle size={13} className="text-yellow-500" /> Sin recibo</span>}
+                        </td>
+                        <td className="px-3 py-3 font-medium whitespace-nowrap">
+                          {recibo ? <span className="text-green-700">${fmt(recibo.total)}</span> : <span className="text-gray-300">—</span>}
+                        </td>
+                        <td className="px-3 py-3 whitespace-nowrap">
+                          {resultado
+                            ? <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${resultado.tieneDiferencias ? 'bg-red-100 text-red-700' : 'bg-green-100 text-green-700'}`}>
+                                {resultado.tieneDiferencias ? `${resultado.diferencias.length} dif.` : '✓ OK'}
+                              </span>
+                            : null}
+                        </td>
+                        <td className="px-3 py-3" onClick={e => e.stopPropagation()}>
+                          <div className="flex gap-1">
+                            {resultado && (
+                              <Button size="sm" variant="ghost" onClick={() => setPanelAbierto(resultado)}>
+                                <Eye size={14} className="text-blue-600" />
+                              </Button>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
+            </div>
           )}
         </CardContent>
       </Card>
 
-      {/* Resultados */}
-      {resultados.length > 0 && (
-        <div className="space-y-4">
-          <h2 className="text-lg font-semibold">
-            Resultados ({resultados.length})
-            <span className="ml-3 text-sm font-normal text-gray-500">
-              {resultados.filter(r => !r.tieneDiferencias).length} OK ·{' '}
-              {resultados.filter(r => r.tieneDiferencias).length} con diferencias
-            </span>
-          </h2>
-          {resultados.map(r => (
-            <ResultadoCard
-              key={r.id}
-              resultado={r}
-              factura={facturasMap[r.facturaId] ?? ({} as Factura)}
-              onEliminar={eliminarComparacion}
-            />
-          ))}
-        </div>
+      {/* Panel de diferencias */}
+      {panelAbierto && (
+        <PanelDiferencias
+          resultado={panelAbierto}
+          factura={facturasMap[panelAbierto.facturaId] ?? ({} as Factura)}
+          onClose={() => setPanelAbierto(null)}
+          onEliminar={() => eliminarComparacion(panelAbierto.id, panelAbierto.facturaId)}
+        />
       )}
     </div>
   )
