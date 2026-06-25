@@ -18,7 +18,7 @@ const nav = [
   { href: '/',           label: 'Dashboard',            icon: LayoutDashboard },
   { href: '/reporte',    label: 'Reporte por Fechas',   icon: BarChart3 },
   { href: '/facturas',   label: 'Facturas',              icon: FileText },
-  { href: '/notas-pos',  label: 'Notas Crédito POS',    icon: Receipt },
+  { href: '/notas-pos',  label: 'Notas Crédito / Débito', icon: Receipt },
   { href: '/proveedores',label: 'Por Proveedor / Fecha', icon: Building2 },
   { href: '/recibos',    label: 'Recibos de Mercancía',  icon: PackageCheck },
   { href: '/comparacion',label: 'Comparación',           icon: GitCompareArrows },

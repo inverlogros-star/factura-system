@@ -235,24 +235,12 @@ export default function ComparacionPage() {
   }
 
   // Filtrar y separar facturas con/sin recibo
-  // Función para identificar notas crédito POS (misma lógica que el comparador)
-  function esNCPOSLocal(f: Factura): boolean {
-    if (f.tipoDocumento !== 'nota_credito') return false
-    const prov = (f.proveedor || '').toLowerCase()
-    const nit  = (f.nitProveedor || '').replace(/\D/g, '')
-    const num  = (f.numeroFactura || '').toLowerCase()
-    if (nit === '222222222' || nit === '99' || nit === '0') return true
-    if (prov.includes('lista de costos') || prov.includes('pos ') || prov.includes(' pos')) return true
-    if (num.includes('pos') || num.startsWith('nc') || num.startsWith('pos')) return true
-    if (!f.nitProveedor && !f.proveedor) return true
-    return false
-  }
-
   const facturasFiltradas = useMemo(() => {
     const q = busqueda.trim().toLowerCase()
     return facturas.filter(f => {
-      // Excluir notas crédito POS — tienen su propio módulo
-      if (esNCPOSLocal(f)) return false
+      // Excluir TODAS las notas crédito — van al módulo "Notas Crédito POS"
+      // La comparación es solo para FACTURAS contra RECIBOS de mercancía
+      if (f.tipoDocumento === 'nota_credito' || f.tipoDocumento === 'nota_debito') return false
       if (!q) return true
       const nitNorm = (f.nitProveedor || '').replace(/[.\-\s]/g, '')
       const qNorm = q.replace(/[.\-\s]/g, '')

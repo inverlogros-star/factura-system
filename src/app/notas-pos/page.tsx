@@ -34,7 +34,10 @@ export default function NotasPOSPage() {
 
   const recargar = async () => {
     const all = await storeFacturas.getAll()
-    setFacturas(all.filter(esNotaCreditoPOS))
+    // Todas las notas crédito y débito van a este módulo — no al de comparación
+    setFacturas(all.filter(f =>
+      f.tipoDocumento === 'nota_credito' || f.tipoDocumento === 'nota_debito'
+    ))
     setMarcadas(new Set())
   }
   useEffect(() => { recargar() }, [])
@@ -86,10 +89,10 @@ export default function NotasPOSPage() {
         <div>
           <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
             <Receipt size={24} className="text-orange-600" />
-            Notas Crédito POS
+            Notas Crédito y Débito
           </h1>
           <p className="text-gray-500 text-sm mt-1">
-            Ajustes internos del punto de venta — <strong>no se comparan con recibos de mercancía</strong>
+            Notas crédito/débito de proveedores y POS — <strong>no se comparan con recibos de mercancía</strong>
           </p>
         </div>
         {marcadas.size > 0 && (
