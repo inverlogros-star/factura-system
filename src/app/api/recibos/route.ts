@@ -43,7 +43,6 @@ export async function POST(req: NextRequest) {
         total = EXCLUDED.total,
         totales = EXCLUDED.totales,
         numero_factura_proveedor = EXCLUDED.numero_factura_proveedor
-      ON CONFLICT (id) DO NOTHING
     `
     return NextResponse.json({ ok: true })
   } catch (err) {
