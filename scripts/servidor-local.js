@@ -126,14 +126,20 @@ async function importarRecibos(fechaInicio, fechaFin) {
   }
 
   let importados = 0, duplicados = 0, errores = 0
+  let primerError = ''
   for (const r of mapa.values()) {
     const res = await postJSON(`${APP_URL}/api/recibos`, r)
-    if (res.error) errores++
-    else if (res.ok) importados++
+    if (res.error) {
+      errores++
+      if (!primerError) {
+        primerError = res.error
+        log(`PRIMER ERROR: ${primerError}`)
+      }
+    } else if (res.ok) importados++
     else duplicados++
   }
   log(`Resultado: ${importados} importados | ${duplicados} duplicados | ${errores} errores`)
-  return { importados, duplicados, errores, total: mapa.size }
+  return { importados, duplicados, errores, total: mapa.size, primerError }
 }
 
 // Página HTML de resultado
@@ -216,7 +222,7 @@ const servidor = http.createServer(async (req, res) => {
          <p>recibos importados correctamente</p>
          <p style="margin-top:12px">Período: <b>${desde}</b> al <b>${hasta}</b></p>
          ${result.duplicados > 0 ? `<p style="color:#f59e0b">⚠️ ${result.duplicados} duplicados omitidos</p>` : ''}
-         ${result.errores > 0 ? `<p style="color:#dc2626">❌ ${result.errores} errores</p>` : ''}
+         ${result.errores > 0 ? `<p style="color:#dc2626">❌ ${result.errores} errores</p><p style="color:#dc2626;font-size:11px;margin-top:4px;word-break:break-all">${result.primerError || ''}</p>` : ''}
          <p style="margin-top:8px;font-size:12px;color:#94a3b8">Recarga la página de Recibos en PACARDYL para verlos</p>`)
       res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' })
       res.end(html)
