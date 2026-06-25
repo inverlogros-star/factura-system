@@ -179,9 +179,11 @@ function detectarEmbalaje(descripcion: string): InfoEmbalaje | null {
     if (desc.includes(key)) return { tipo: key, unidades: uds, textoDetectado: key }
   }
 
-  // Patrones: "X 12", "*12", "x12", "PAC X 6", "CAJA*24", "CAJA X 12 UND", "X24"
+  // Patrones comunes en facturas colombianas
+  // Incluye formatos lácteos: "LECHE X 12LT", "YOGURT*30", "ALPINA X 6 BOLSAS", etc.
   const patronesNum = [
-    /[x*]\s*(\d+)\s*(und|uds|unid|unidades|un)?/i,  // X 12, *12, x12
+    /\*\s*(\d+)\s*(und|uds|unid|unidades|un|lt|lts|litro|litros|ml|gr|gramos|kg)?/i,  // *12, *6
+    /x\s*(\d+)\s*(und|uds|unid|unidades|un|lt|lts|litro|litros|ml|gr|gramos|kg)/i,    // X 12LT, X 6 UND
     /caja\s*[x*]?\s*(\d+)/i,
     /paca?\s*[x*]?\s*(\d+)/i,
     /pack\s*[x*]?\s*(\d+)/i,
@@ -191,6 +193,10 @@ function detectarEmbalaje(descripcion: string): InfoEmbalaje | null {
     /bandeja\s*[x*]?\s*(\d+)/i,
     /display\s*[x*]?\s*(\d+)/i,
     /estuche\s*[x*]?\s*(\d+)/i,
+    /tira\s*[x*]?\s*(\d+)/i,
+    /mazo\s*[x*]?\s*(\d+)/i,
+    // Número al final: "LECHE ALPINA ENTERA 1LT X12" o "YOGURT ALPINA 150G X24"
+    /x\s*(\d+)$/i,
     /(\d+)\s*(und|uds|unidades)\s*[x*]/i,
   ]
 
@@ -373,32 +379,42 @@ export function compararFacturaConRecibo(
   const diferencias: Diferencia[] = []
   const { pares, soloFactura, soloRecibo } = emparejarProductos(factura, recibo)
 
-  // Compara dos valores teniendo en cuenta si la factura trae decimales
-  // Si la factura NO tiene decimales, se redondean ambos antes de comparar
+  // Compara valores respetando decimales de la factura.
+  // REGLA: el recibo SIEMPRE se redondea al peso (sin centavos).
+  // Si la factura es entero → comparar en enteros. Si tiene decimales → comparar con decimales.
   function compararValor(valFactura: number, valRecibo: number): {
     diferencia: number, usarDecimales: boolean
   } {
+    // El recibo siempre redondeado al peso
+    const reciboRedondeado = Math.round(valRecibo)
     const factTieneDecimales = Math.abs(valFactura - Math.round(valFactura)) > 0.005
+
     if (!factTieneDecimales) {
-      // Factura es número entero → ignorar decimales del recibo
-      return { diferencia: Math.round(valFactura) - Math.round(valRecibo), usarDecimales: false }
+      // Factura entera → comparar ambos en enteros
+      return { diferencia: Math.round(valFactura) - reciboRedondeado, usarDecimales: false }
     }
-    return { diferencia: valFactura - valRecibo, usarDecimales: true }
+    // Factura con decimales → comparar exacto factura vs recibo redondeado
+    return { diferencia: valFactura - reciboRedondeado, usarDecimales: true }
   }
 
   // --- Comparar cada par emparejado ---
   for (const { pf, pr, criterio } of pares) {
-    // Detectar si la factura viene en embalaje (caja, sixpack, etc.)
-    const embalaje = detectarEmbalaje(pf.descripcion)
+    // Detectar embalaje en la factura Y en el recibo
+    const embalajeF = detectarEmbalaje(pf.descripcion)
+    const embalajeR = detectarEmbalaje(pr.descripcion)
+    // Usar el embalaje detectado (primero factura, luego recibo)
+    const embalaje = embalajeF || embalajeR
 
-    // Cantidad efectiva de la factura en unidades
-    // Si viene en cajas de 12 y la factura dice 5 cajas → 60 unidades
+    // Cantidad efectiva en unidades base
+    // Factura: 6 cajas × 12 und/caja = 72 unidades
+    // Recibo:  72 unidades individuales
     const cantF_raw = pf.cantidad
     const cantF_uds = embalaje ? cantF_raw * embalaje.unidades : cantF_raw
-    const cantR = pr.cantidad
+    // Si el recibo también tiene embalaje, convertirlo también
+    const cantR_raw = pr.cantidad
+    const cantR     = embalajeR ? cantR_raw * embalajeR.unidades : cantR_raw
 
-    // Para comparar precios: si hay embalaje, el precio unitario de la factura
-    // es por embalaje, el del recibo es por unidad → convertir
+    // Precio unitario por unidad base
     const precioF_uds = embalaje ? pf.precioUnitario / embalaje.unidades : pf.precioUnitario
 
     const cantF = cantF_uds  // cantidad comparable
