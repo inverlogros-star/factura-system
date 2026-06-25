@@ -199,10 +199,15 @@ export default function ComparacionPage() {
 
   // Filtrar y separar facturas con/sin recibo
   const facturasFiltradas = useMemo(() => {
-    const q = busqueda.toLowerCase()
-    return facturas.filter(f =>
-      !q || f.numeroFactura.toLowerCase().includes(q) || (f.proveedor || '').toLowerCase().includes(q)
-    )
+    const q = busqueda.trim().toLowerCase()
+    return facturas.filter(f => {
+      if (!q) return true
+      const nitNorm = (f.nitProveedor || '').replace(/[.\-\s]/g, '')
+      const qNorm = q.replace(/[.\-\s]/g, '')
+      return f.numeroFactura.toLowerCase().includes(q) ||
+        (f.proveedor || '').toLowerCase().includes(q) ||
+        nitNorm.includes(qNorm)
+    })
   }, [facturas, busqueda])
 
   const conRecibo    = facturasFiltradas.filter(f => encontrarReciboPorFactura(f, recibos))
@@ -226,10 +231,20 @@ export default function ComparacionPage() {
         <div className="flex gap-2 items-center">
           <div className="relative">
             <Search size={14} className="absolute left-3 top-2.5 text-gray-400" />
-            <input type="text" placeholder="Buscar factura o proveedor..."
+            <input type="text" placeholder="Proveedor, NIT o No. Factura..."
               value={busqueda} onChange={e => setBusqueda(e.target.value)}
-              className="pl-8 pr-3 py-2 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-300 w-56" />
+              className="pl-8 pr-8 py-2 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-300 w-64" />
+            {busqueda && (
+              <button onClick={() => setBusqueda('')} className="absolute right-2.5 top-2.5 text-gray-400 hover:text-gray-600">
+                <span className="text-xs">✕</span>
+              </button>
+            )}
           </div>
+          {busqueda && (
+            <span className="text-xs text-gray-500 whitespace-nowrap">
+              {facturasFiltradas.length} / {facturas.length}
+            </span>
+          )}
           {seleccionadas.size > 0 && (
             <Button onClick={compararSeleccionadas} disabled={procesando}>
               <GitCompareArrows size={15} className="mr-1.5" />

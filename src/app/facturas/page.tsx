@@ -3,7 +3,7 @@ import { useEffect, useRef, useState } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { Upload, Trash2, FileText, Eye, CheckSquare, Square, Filter } from 'lucide-react'
+import { Upload, Trash2, FileText, Eye, CheckSquare, Square, Search, X } from 'lucide-react'
 import { parsearFacturaDIAN } from '@/lib/parser-dian'
 import { storeFacturas } from '@/lib/store'
 import type { Factura } from '@/types'
@@ -36,6 +36,7 @@ export default function FacturasPage() {
   const [seleccionada, setSeleccionada] = useState<Factura | null>(null)
   const [marcadas, setMarcadas] = useState<Set<string>>(new Set())
   const [filtroTipo, setFiltroTipo] = useState<string>('todos')
+  const [busqueda, setBusqueda] = useState('')
   const inputRef = useRef<HTMLInputElement>(null)
 
   const recargar = async () => { setFacturas(await storeFacturas.getAll()); setMarcadas(new Set()) }
@@ -74,7 +75,15 @@ export default function FacturasPage() {
     await recargar()
   }
 
-  const facturasFiltradas = filtroTipo === 'todos' ? facturas : facturas.filter(f => (f.tipoDocumento || 'factura') === filtroTipo)
+  const facturasFiltradas = facturas.filter(f => {
+    const tipoOk = filtroTipo === 'todos' || (f.tipoDocumento || 'factura') === filtroTipo
+    const q = busqueda.trim().toLowerCase()
+    const busquedaOk = !q ||
+      f.numeroFactura.toLowerCase().includes(q) ||
+      (f.proveedor || '').toLowerCase().includes(q) ||
+      (f.nitProveedor || '').replace(/[.\-\s]/g, '').includes(q.replace(/[.\-\s]/g, ''))
+    return tipoOk && busquedaOk
+  })
   const todasMarcadas = facturasFiltradas.length > 0 && facturasFiltradas.every(f => marcadas.has(f.id))
 
   const conteos = facturas.reduce((acc, f) => {
@@ -104,6 +113,30 @@ export default function FacturasPage() {
         </div>
         <input ref={inputRef} type="file" accept=".xml" multiple className="hidden"
           onChange={e => handleArchivos(e.target.files)} />
+      </div>
+
+      {/* Barra de búsqueda */}
+      <div className="flex gap-3 items-center">
+        <div className="relative flex-1 max-w-sm">
+          <Search size={15} className="absolute left-3 top-2.5 text-gray-400" />
+          <input
+            type="text"
+            placeholder="Buscar por proveedor o NIT..."
+            value={busqueda}
+            onChange={e => setBusqueda(e.target.value)}
+            className="w-full pl-9 pr-8 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-300 bg-white"
+          />
+          {busqueda && (
+            <button onClick={() => setBusqueda('')} className="absolute right-2.5 top-2.5 text-gray-400 hover:text-gray-600">
+              <X size={15} />
+            </button>
+          )}
+        </div>
+        {busqueda && (
+          <span className="text-sm text-gray-500">
+            {facturasFiltradas.length} resultado(s) de {facturas.length}
+          </span>
+        )}
       </div>
 
       {/* Filtros por tipo */}
