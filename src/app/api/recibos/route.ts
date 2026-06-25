@@ -7,7 +7,7 @@ export async function GET() {
     const { rows } = await sql`
       SELECT id, numero_recibo, proveedor, nit_proveedor, fecha,
              productos, total, numero_factura_proveedor, totales, creado_en
-      FROM recibos ORDER BY creado_en DESC`
+      FROM recibos ORDER BY fecha ASC, numero_recibo ASC`
     const recibos: ReciboMercancia[] = rows.map(r => ({
       id: r.id,
       numeroRecibo: r.numero_recibo,
