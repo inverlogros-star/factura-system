@@ -1,33 +1,80 @@
 import type { Factura, ReciboMercancia, ProductoFactura, ProductoRecibo, Diferencia, ResultadoComparacion } from '@/types'
 
 // ── Normalización ─────────────────────────────────────────────────────────────
+
+// Abreviaturas comunes en facturas colombianas
+const ABREVIATURAS: Record<string, string> = {
+  'manzna': 'manzana', 'manzn': 'manzana',
+  'bande': 'bandeja', 'bandej': 'bandeja',
+  'aprox': 'aproximado', 'apx': 'aproximado',
+  'und': 'unidad', 'uds': 'unidades', 'un': 'unidad',
+  'x': '', 'gr': 'gramo', 'grs': 'gramos', 'kg': 'kilo', 'kl': 'kilo',
+  'selec': 'selecto', 'select': 'selecto',
+  'comb': 'combinado', 'combina': 'combinado',
+  'nac': 'nacional', 'col': 'colombia',
+}
+
 function normalizar(texto: string): string {
-  return texto
+  let s = (texto || '')
     .toLowerCase()
     .normalize('NFD').replace(/[̀-ͯ]/g, '')
     .replace(/[^a-z0-9\s]/g, ' ')
     .replace(/\s+/g, ' ')
     .trim()
+
+  // Eliminar prefijo numérico al inicio (ej: "750 GUAYABA" → "GUAYABA")
+  s = s.replace(/^\d+\s+/, '')
+
+  // Eliminar EAN (secuencia de 8-14 dígitos seguida de espacio)
+  s = s.replace(/\b\d{8,14}\b/g, '').replace(/\s+/g, ' ').trim()
+
+  // Expandir abreviaturas
+  s = s.split(' ').map(w => ABREVIATURAS[w] ?? w).filter(Boolean).join(' ')
+
+  return s
 }
 
-// Limpia y normaliza un código EAN/barras
-function limpiarEAN(codigo: string): string {
-  return (codigo || '').replace(/\D/g, '').trim()
+// Extrae EAN de un campo código O de dentro de la descripción
+function limpiarEAN(codigo: string, descripcion?: string): string {
+  const eanCodigo = (codigo || '').replace(/\D/g, '').trim()
+  if (eanCodigo.length >= 8) return eanCodigo
+
+  // Intentar extraer EAN de la descripción (8-14 dígitos al inicio)
+  if (descripcion) {
+    const match = (descripcion || '').match(/\b(\d{8,14})\b/)
+    if (match) return match[1]
+  }
+  return eanCodigo
 }
 
-// Similitud Jaccard entre palabras (ignora palabras <= 2 chars)
+// Similitud combinada: Jaccard de palabras + substrings
 function similitud(a: string, b: string): number {
   const na = normalizar(a), nb = normalizar(b)
+  if (!na || !nb) return 0
   if (na === nb) return 1
-  if (na.includes(nb) || nb.includes(na)) return 0.9
-  const wa = new Set(na.split(' ').filter(w => w.length > 2))
-  const wb = new Set(nb.split(' ').filter(w => w.length > 2))
-  const inter = [...wa].filter(w => wb.has(w)).length
-  const union = new Set([...wa, ...wb]).size
-  return union === 0 ? 0 : inter / union
+
+  // Contiene completo
+  if (na.includes(nb) || nb.includes(na)) return 0.92
+
+  const wa = na.split(' ').filter(w => w.length > 2)
+  const wb = nb.split(' ').filter(w => w.length > 2)
+  const setA = new Set(wa), setB = new Set(wb)
+
+  // Jaccard estricto
+  const inter = [...setA].filter(w => setB.has(w)).length
+  const union = new Set([...setA, ...setB]).size
+  const jaccard = union === 0 ? 0 : inter / union
+
+  // Bonus: palabras de a que son substring de alguna palabra de b (abreviaturas)
+  let bonus = 0
+  for (const w of wa) {
+    if (w.length >= 4 && [...setB].some(bw => bw.startsWith(w) || w.startsWith(bw))) bonus += 0.08
+  }
+
+  return Math.min(1, jaccard + bonus)
 }
 
-const UMBRAL_DESC = 0.55  // similitud mínima para emparejar por descripción
+const UMBRAL_DESC = 0.45  // umbral más permisivo para manejar abreviaturas
 
 // ── Emparejamiento EAN + Descripción ─────────────────────────────────────────
 interface Par {
@@ -46,30 +93,31 @@ function emparejarProductos(
   const soloFactura: ProductoFactura[] = []
 
   for (const pf of factura.productos) {
-    const eanF = limpiarEAN(pf.codigo)
+    // Extraer EAN del campo codigo O de la descripción
+    const eanF = limpiarEAN(pf.codigo, pf.descripcion)
     let mejor: { idx: number; par: Par } | null = null
 
     for (let i = 0; i < recibo.productos.length; i++) {
       if (usadosRecibo.has(i)) continue
       const pr = recibo.productos[i]
-      const eanR = limpiarEAN(pr.codigo)
+      const eanR = limpiarEAN(pr.codigo, pr.descripcion)
 
-      // 1. Coincidencia exacta por EAN (máxima prioridad)
-      if (eanF && eanR && eanF === eanR) {
+      // 1. Coincidencia exacta por EAN
+      if (eanF && eanR && eanF.length >= 8 && eanR.length >= 8 && eanF === eanR) {
         mejor = { idx: i, par: { pf, pr, criterio: 'ean', score: 1 } }
         break
       }
 
-      // 2. EAN parcial (uno contiene al otro, e.g. EAN-8 vs EAN-13)
+      // 2. EAN parcial (EAN-8 dentro de EAN-13, etc.)
       if (eanF && eanR && eanF.length >= 6 && eanR.length >= 6 &&
-        (eanF.endsWith(eanR) || eanR.endsWith(eanF) || eanF.includes(eanR) || eanR.includes(eanF))) {
+        (eanF.endsWith(eanR) || eanR.endsWith(eanF))) {
         const sc = 0.95
         if (!mejor || sc > mejor.par.score)
           mejor = { idx: i, par: { pf, pr, criterio: 'ean', score: sc } }
         continue
       }
 
-      // 3. Coincidencia por descripción
+      // 3. Descripción — usa normalización mejorada con abreviaturas
       const sc = similitud(pf.descripcion, pr.descripcion)
       if (sc >= UMBRAL_DESC && (!mejor || sc > mejor.par.score)) {
         mejor = { idx: i, par: { pf, pr, criterio: 'descripcion', score: sc } }
