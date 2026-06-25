@@ -41,8 +41,13 @@ function PanelDiferencias({ resultado, factura, onClose, onEliminar }: {
   onEliminar: () => void
 }) {
   async function descargarPDF() {
-    try { await generarInformePDF(resultado, factura); toast.success('PDF generado') }
-    catch (e) { toast.error(`Error: ${(e as Error).message}`) }
+    try {
+      // Buscar el recibo asociado para incluir su fecha en el informe
+      const recibosStore = await import('@/lib/store').then(m => m.storeRecibos.getAll())
+      const reciboAsociado = recibosStore.find((r: any) => r.id === resultado.reciboId)
+      await generarInformePDF(resultado, factura, reciboAsociado)
+      toast.success('PDF generado')
+    } catch (e) { toast.error(`Error: ${(e as Error).message}`) }
   }
 
   async function descargarNotaAjuste() {

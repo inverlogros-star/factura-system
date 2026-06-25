@@ -1,5 +1,5 @@
 'use client'
-import type { ResultadoComparacion, Diferencia, Factura } from '@/types'
+import type { ResultadoComparacion, Diferencia, Factura, ReciboMercancia } from '@/types'
 
 function fmt(n: number): string {
   return Number(n).toLocaleString('es-CO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
@@ -15,16 +15,27 @@ const TIPO_LABEL: Record<string, string> = {
 
 export async function generarInformePDF(
   resultado: ResultadoComparacion,
-  factura: Factura
+  factura: Factura,
+  recibo?: ReciboMercancia
 ) {
   const { default: jsPDF } = await import('jspdf')
   const { default: autoTable } = await import('jspdf-autotable')
 
   const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' })
   const pageW = doc.internal.pageSize.getWidth()
-  const fechaHoy = new Date().toLocaleDateString('es-CO', {
-    year: 'numeric', month: 'long', day: 'numeric',
+
+  // Fecha y hora de generación
+  const ahora = new Date()
+  const fechaHoy = ahora.toLocaleDateString('es-CO', {
+    year: 'numeric', month: 'long', day: 'numeric', timeZone: 'America/Bogota'
   })
+  const horaHoy = ahora.toLocaleTimeString('es-CO', {
+    hour: '2-digit', minute: '2-digit', second: '2-digit', timeZone: 'America/Bogota'
+  })
+
+  // Fecha del recibo de mercancía
+  const fechaRecibo = recibo?.fecha || '—'
+  const nitProveedor = factura.nitProveedor || recibo?.nitProveedor || resultado.proveedor || '—'
 
   // ── ENCABEZADO ──────────────────────────────────────────────────────────────
   doc.setFillColor(30, 64, 175)
@@ -45,70 +56,72 @@ export async function generarInformePDF(
 
   doc.setFontSize(8.5)
   doc.setFont('helvetica', 'normal')
-  doc.text(`Generado: ${fechaHoy}`, pageW - 14, 17, { align: 'right' })
-  doc.text(`Proveedor: ${resultado.proveedor || '—'}`, pageW - 14, 23, { align: 'right' })
+  doc.text(`Generado: ${fechaHoy} ${horaHoy}`, pageW - 14, 17, { align: 'right' })
+  doc.text(`Proveedor: ${resultado.proveedor || '—'} | NIT: ${nitProveedor}`, pageW - 14, 23, { align: 'right' })
 
   // ── INFO FACTURA / RECIBO ────────────────────────────────────────────────────
   doc.setTextColor(0, 0, 0)
   let y = 33
 
   doc.setFillColor(241, 245, 249)
-  doc.rect(10, y - 4, pageW - 20, 20, 'F')
+  doc.rect(10, y - 4, pageW - 20, 26, 'F')
   doc.setDrawColor(200, 210, 230)
-  doc.rect(10, y - 4, pageW - 20, 20, 'S')
+  doc.rect(10, y - 4, pageW - 20, 26, 'S')
 
-  const col1 = 14, col2 = 95, col3 = 180
+  const col1 = 14, col2 = 95, col3 = 180, col4 = 240
 
   doc.setFontSize(8.5)
-  doc.setFont('helvetica', 'bold')
-  doc.text('No. Factura:', col1, y)
-  doc.setFont('helvetica', 'normal')
-  doc.text(resultado.numeroFactura, col1 + 24, y)
 
-  doc.setFont('helvetica', 'bold')
-  doc.text('Últimos 4 dígitos:', col1, y + 6)
-  doc.setFont('helvetica', 'normal')
-  doc.text(resultado.numeroFactura.slice(-4), col1 + 34, y + 6)
+  // Fila 1
+  doc.setFont('helvetica', 'bold'); doc.text('Proveedor:', col1, y)
+  doc.setFont('helvetica', 'normal'); doc.text(resultado.proveedor || '—', col1 + 22, y)
 
-  doc.setFont('helvetica', 'bold')
-  doc.text('No. Recibo:', col2, y)
-  doc.setFont('helvetica', 'normal')
-  doc.text(resultado.numeroRecibo, col2 + 22, y)
+  doc.setFont('helvetica', 'bold'); doc.text('NIT:', col2, y)
+  doc.setFont('helvetica', 'normal'); doc.text(nitProveedor, col2 + 10, y)
 
-  doc.setFont('helvetica', 'bold')
-  doc.text('Total Mercancía Factura:', col2, y + 6)
-  doc.setFont('helvetica', 'normal')
-  doc.text(`$${fmt(factura.subtotal)}`, col2 + 46, y + 6)
+  doc.setFont('helvetica', 'bold'); doc.text('No. Factura:', col3, y)
+  doc.setFont('helvetica', 'normal'); doc.text(resultado.numeroFactura, col3 + 24, y)
 
-  doc.setFont('helvetica', 'bold')
-  doc.text('IVA Facturado:', col3, y)
-  doc.setFont('helvetica', 'normal')
-  doc.text(`$${fmt(factura.impuestos)}`, col3 + 28, y)
+  doc.setFont('helvetica', 'bold'); doc.text('Últ. 4:', col4, y)
+  doc.setFont('helvetica', 'normal'); doc.text(resultado.numeroFactura.replace(/\D/g,'').slice(-4), col4 + 14, y)
 
-  doc.setFont('helvetica', 'bold')
-  doc.text('Total Factura:', col3, y + 6)
-  doc.setFontSize(9)
-  doc.setTextColor(30, 64, 175)
-  doc.setFont('helvetica', 'bold')
-  doc.text(`$${fmt(factura.total)}`, col3 + 27, y + 6)
+  // Fila 2
+  doc.setFont('helvetica', 'bold'); doc.text('📅 Fecha Recibo:', col1, y + 7)
+  doc.setTextColor(21, 128, 61); doc.setFont('helvetica', 'bold')
+  doc.text(fechaRecibo, col1 + 32, y + 7)
   doc.setTextColor(0, 0, 0)
 
-  y += 6
-  doc.setFontSize(8.5)
-  doc.setFont('helvetica', 'bold')
-  doc.text('Total Recibo:', col1, y + 6)
-  doc.setFont('helvetica', 'normal')
-  doc.text(`$${fmt(resultado.valorTotalRecibo)}`, col1 + 25, y + 6)
+  doc.setFont('helvetica', 'bold'); doc.text('No. Recibo:', col2, y + 7)
+  doc.setFont('helvetica', 'normal'); doc.text(resultado.numeroRecibo, col2 + 22, y + 7)
 
-  doc.setFont('helvetica', 'bold')
-  doc.text('Diferencia Total:', col2, y + 6)
+  doc.setFont('helvetica', 'bold'); doc.text('IVA Facturado:', col3, y + 7)
+  doc.setFont('helvetica', 'normal'); doc.text(`$${fmt(factura.impuestos)}`, col3 + 28, y + 7)
+
+  doc.setFont('helvetica', 'bold'); doc.text('Total Fact.:', col4, y + 7)
+  doc.setTextColor(30, 64, 175); doc.setFont('helvetica', 'bold')
+  doc.text(`$${fmt(factura.total)}`, col4 + 22, y + 7)
+  doc.setTextColor(0, 0, 0)
+
+  // Fila 3
+  doc.setFont('helvetica', 'bold'); doc.text('Total Mercancía (sin IVA):', col1, y + 14)
+  doc.setFont('helvetica', 'normal'); doc.text(`$${fmt(factura.subtotal)}`, col1 + 48, y + 14)
+
+  doc.setFont('helvetica', 'bold'); doc.text('Total Recibo:', col2, y + 14)
+  doc.setFont('helvetica', 'normal'); doc.text(`$${fmt(resultado.valorTotalRecibo)}`, col2 + 26, y + 14)
+
+  doc.setFont('helvetica', 'bold'); doc.text('Diferencia Total:', col3, y + 14)
   const diffColor = resultado.valorDiferenciaTotal !== 0 ? [185, 28, 28] as const : [21, 128, 61] as const
   doc.setTextColor(diffColor[0], diffColor[1], diffColor[2])
   doc.setFont('helvetica', 'bold')
-  doc.text(`$${fmt(resultado.valorDiferenciaTotal)}`, col2 + 32, y + 6)
+  doc.text(`$${fmt(resultado.valorDiferenciaTotal)}`, col3 + 32, y + 14)
   doc.setTextColor(0, 0, 0)
 
-  y += 18
+  doc.setFont('helvetica', 'bold'); doc.text('Generado:', col4, y + 14)
+  doc.setFont('helvetica', 'normal'); doc.setFontSize(7.5)
+  doc.text(`${fechaHoy} ${horaHoy}`, col4 + 19, y + 14)
+  doc.setFontSize(8.5)
+
+  y += 30
 
   // ── TABLA DETALLE ────────────────────────────────────────────────────────────
   doc.setFontSize(9.5)
@@ -238,7 +251,7 @@ export async function generarInformePDF(
     doc.setTextColor(130, 130, 130)
     doc.setFont('helvetica', 'normal')
     const ph = doc.internal.pageSize.getHeight()
-    doc.text(`SUPERMERCADOS PACARDYL — INVERSIONES LOGROS S.A. — Factura ${resultado.numeroFactura} — Recibo ${resultado.numeroRecibo}`, 14, ph - 5)
+    doc.text(`PACARDYL — NIT Prov: ${nitProveedor} — Factura ${resultado.numeroFactura} — Recibo ${resultado.numeroRecibo} — Fecha Recibo: ${fechaRecibo} — Generado: ${fechaHoy}`, 14, ph - 5)
     doc.text(`Página ${i} de ${pages}`, pageW - 14, ph - 5, { align: 'right' })
   }
 
