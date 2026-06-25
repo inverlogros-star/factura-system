@@ -62,7 +62,10 @@ export async function generarInformePDF(
   // ── INFO FACTURA / RECIBO — tabla de cabecera legible ────────────────────────
   doc.setTextColor(0, 0, 0)
 
-  const difColor = Math.abs(resultado.valorDiferenciaTotal) > 0.01
+  // Redondear recibo al peso en el informe
+  const totalReciboRedondeado = Math.round(Number(resultado.valorTotalRecibo))
+  const diferenciaReal        = Number(factura.total) - totalReciboRedondeado
+  const difColor = Math.abs(diferenciaReal) >= 1
     ? [185, 28, 28] : [21, 128, 61]
 
   // Tabla de cabecera con autoTable — dos secciones (identificación + valores)
@@ -90,8 +93,8 @@ export async function generarInformePDF(
       `$${fmt(factura.subtotal)}`,
       `$${fmt(factura.impuestos)}`,
       `$${fmt(factura.total)}`,
-      `$${fmt(resultado.valorTotalRecibo)}`,
-      `$${fmt(resultado.valorDiferenciaTotal)}`,
+      `$${fmt(totalReciboRedondeado)}`,
+      `$${fmt(diferenciaReal)}`,
     ]],
     columnStyles: {
       0:{cellWidth:72}, 1:{cellWidth:40},
@@ -186,8 +189,8 @@ export async function generarInformePDF(
   const subtotalFactura = Number(factura.subtotal)
   const ivaFactura      = Number(factura.impuestos)
   const totalFactura    = Number(factura.total)
-  // Valores del recibo
-  const totalRecibo     = Number(resultado.valorTotalRecibo)
+  // Valores del recibo — siempre redondeado al peso
+  const totalRecibo     = totalReciboRedondeado
   // Diferencia neta
   const difTotal        = totalFactura - totalRecibo
 

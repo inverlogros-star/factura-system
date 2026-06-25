@@ -84,23 +84,30 @@ function PanelDiferencias({ resultado, factura, onClose, onEliminar }: {
       </div>
 
       <div className="flex-1 overflow-auto p-8 bg-gray-50 space-y-6">
-        {/* Resumen numérico */}
+        {/* Resumen numérico — el recibo siempre se redondea al peso */}
+        {(() => {
+          const totalFactura = Number(resultado.valorTotalFactura)
+          const totalRecibo  = Math.round(Number(resultado.valorTotalRecibo))  // redondear al peso
+          const diferencia   = totalFactura - totalRecibo
+          return (
         <div className="grid grid-cols-3 gap-4">
           <div className="bg-white rounded-lg border p-4 text-center">
             <p className="text-xs text-gray-500 mb-1">Total Factura (con IVA)</p>
-            <p className="text-2xl font-bold text-blue-700">${fmt(resultado.valorTotalFactura)}</p>
+            <p className="text-2xl font-bold text-blue-700">${fmt(totalFactura)}</p>
           </div>
           <div className="bg-white rounded-lg border p-4 text-center">
-            <p className="text-xs text-gray-500 mb-1">Total Recibo</p>
-            <p className="text-2xl font-bold text-green-700">${fmt(resultado.valorTotalRecibo)}</p>
+            <p className="text-xs text-gray-500 mb-1">Total Recibo (redondeado)</p>
+            <p className="text-2xl font-bold text-green-700">${fmt(totalRecibo)}</p>
           </div>
-          <div className={`rounded-lg border p-4 text-center ${resultado.valorDiferenciaTotal === 0 ? 'bg-green-50 border-green-200' : 'bg-red-50 border-red-200'}`}>
+          <div className={`rounded-lg border p-4 text-center ${Math.abs(diferencia) < 1 ? 'bg-green-50 border-green-200' : 'bg-red-50 border-red-200'}`}>
             <p className="text-xs text-gray-500 mb-1">Diferencia</p>
-            <p className={`text-2xl font-bold ${resultado.valorDiferenciaTotal === 0 ? 'text-green-700' : 'text-red-700'}`}>
-              ${fmt(resultado.valorDiferenciaTotal)}
+            <p className={`text-2xl font-bold ${Math.abs(diferencia) < 1 ? 'text-green-700' : 'text-red-700'}`}>
+              ${fmt(diferencia)}
             </p>
           </div>
         </div>
+          )
+        })()}
 
         {/* Diferencias por producto */}
         {resultado.diferencias.length === 0 ? (
