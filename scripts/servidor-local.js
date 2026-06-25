@@ -82,13 +82,13 @@ async function importarRecibos(fechaInicio, fechaFin) {
         comentario:            String(f.Ent_Comentario  || '').trim(),
         entTipo:               String(f.Ent_Tipo        || '').trim(),
         // Totales del encabezado (Ent_*)
-        entNeto:               Number(f.Ent_Neto        || 0),   // total a pagar
-        entBruto:              Number(f.Ent_Bruto       || 0),
-        entDescuentos:         Number(f.Ent_Descuentos  || 0),
-        entIva:                Number(f.Ent_Iva         || 0),
-        entIconsumo:           Number(f.Ent_IConsumo    || 0),
-        entEstampillas:        Number(f.Ent_Estampillas || 0),
-        entVrFactura:          Number(f.Ent_VrFactura   || 0),
+        entNeto:               Math.round(Number(f.Ent_Neto        || 0)),   // total a pagar (redondeado al peso)
+        entBruto:              Math.round(Number(f.Ent_Bruto       || 0)),
+        entDescuentos:         Math.round(Number(f.Ent_Descuentos  || 0)),
+        entIva:                Math.round(Number(f.Ent_Iva         || 0)),
+        entIconsumo:           Math.round(Number(f.Ent_IConsumo    || 0)),
+        entEstampillas:        Math.round(Number(f.Ent_Estampillas || 0)),
+        entVrFactura:          Math.round(Number(f.Ent_VrFactura   || 0)),
         productos: [], total: 0,
         creadoEn: new Date().toISOString(),
       })
@@ -104,9 +104,9 @@ async function importarRecibos(fechaInicio, fechaFin) {
     const descPct1    = Number(f.EntDet_Descue01      || 0)  // % descuento 1
     const descPct2    = Number(f.EntDet_Descue02      || 0)  // % descuento 2
     const descPct3    = Number(f.EntDet_Descue03      || 0)  // % descuento 3
-    const totalBruto  = Number(f.EntDet_TotalBruto    || cantidad * costoBruto)
-    const totalNeto   = Number(f.EntDet_TotalNeto     || cantidad * costoNeto)
-    // Descuento real = diferencia entre bruto y neto
+    // Redondear al peso — el recibo no maneja centavos
+    const totalBruto  = Math.round(Number(f.EntDet_TotalBruto    || cantidad * costoBruto))
+    const totalNeto   = Math.round(Number(f.EntDet_TotalNeto     || cantidad * costoNeto))
     const descuento   = Math.max(0, totalBruto - totalNeto)
 
     // TASAS (%) de impuestos
@@ -115,14 +115,13 @@ async function importarRecibos(fechaInicio, fechaFin) {
     const tasaIbua    = Number(f.EntDet_IBUA          || 0)  // tasa IBUA %
     const tasaIconsumo= Number(f.EntDet_IConsumo      || 0)  // tasa Impoconsumo %
 
-    // VALORES reales de impuestos (TotalVr* son los valores monetarios de la línea)
-    const ivaValor    = Number(f.TotalVrIva           || 0)  // valor IVA de la línea
-    const icuiValor   = Number(f.TotalVrICUI          || 0)  // valor ICUI de la línea
-    const ibuaValor   = Number(f.TotalVrIBUA          || 0)  // valor IBUA de la línea
-    // Impoconsumo: calcular si no hay campo específico de valor
-    const iconsumoValor = Number(f.EntDet_IConsumo > 1 ? 0 : f.EntDet_IConsumo || 0)
-    const estampillas = Number(f.EntDet_Estampillas   || 0)
-    const otros       = Number(f.EntDet_Otros         || 0)
+    // VALORES reales de impuestos — redondeados al peso
+    const ivaValor    = Math.round(Number(f.TotalVrIva           || 0))
+    const icuiValor   = Math.round(Number(f.TotalVrICUI          || 0))
+    const ibuaValor   = Math.round(Number(f.TotalVrIBUA          || 0))
+    const iconsumoValor = Math.round(Number(f.EntDet_IConsumo > 1 ? 0 : f.EntDet_IConsumo || 0))
+    const estampillas = Math.round(Number(f.EntDet_Estampillas   || 0))
+    const otros       = Math.round(Number(f.EntDet_Otros         || 0))
 
     if (String(f.EntDet_Barra||'').trim() || String(f.EntDet_Articulo||'').trim()) {
       r.productos.push({
@@ -156,19 +155,20 @@ async function importarRecibos(fechaInicio, fechaFin) {
   for (const r of mapa.values()) {
     const p = r.productos
     r.totales = {
-      bruto:        p.reduce((s, x) => s + (x.totalBruto||0), 0),
-      descuentos:   p.reduce((s, x) => s + (x.descuento||0), 0),
-      subtotalNeto: p.reduce((s, x) => s + x.subtotal, 0),
-      iva:          p.reduce((s, x) => s + (x.iva||0), 0),
-      iconsumo:     p.reduce((s, x) => s + (x.iconsumo||0), 0),
-      ibua:         p.reduce((s, x) => s + (x.ibua||0), 0),
-      icui:         p.reduce((s, x) => s + (x.icui||0), 0),
-      estampillas:  p.reduce((s, x) => s + (x.estampillas||0), 0),
-      neto:         r.total,
+      bruto:        Math.round(p.reduce((s, x) => s + (x.totalBruto||0), 0)),
+      descuentos:   Math.round(p.reduce((s, x) => s + (x.descuento||0), 0)),
+      subtotalNeto: Math.round(p.reduce((s, x) => s + x.subtotal, 0)),
+      iva:          Math.round(p.reduce((s, x) => s + (x.iva||0), 0)),
+      iconsumo:     Math.round(p.reduce((s, x) => s + (x.iconsumo||0), 0)),
+      ibua:         Math.round(p.reduce((s, x) => s + (x.ibua||0), 0)),
+      icui:         Math.round(p.reduce((s, x) => s + (x.icui||0), 0)),
+      estampillas:  Math.round(p.reduce((s, x) => s + (x.estampillas||0), 0)),
+      neto:         0,  // se asigna abajo
     }
-    // Ent_Neto = total real a pagar (suma de todo: neto + IVA + impoconsumo + IBUA + ICUI)
-    if (r.entNeto > 0) r.total = r.entNeto
-    else if (r.total === 0) r.total = r.totales.subtotalNeto + r.totales.iva + r.totales.iconsumo + r.totales.ibua + r.totales.icui
+    // Ent_Neto = total real a pagar — redondeado al peso
+    if (r.entNeto > 0) r.total = r.entNeto  // ya fue redondeado al crear el mapa
+    else if (r.total === 0) r.total = Math.round(r.totales.subtotalNeto + r.totales.iva + r.totales.iconsumo + r.totales.ibua + r.totales.icui)
+    r.totales.neto = r.total
   }
 
   let nuevos = 0, actualizados = 0, errores = 0

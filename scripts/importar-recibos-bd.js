@@ -75,16 +75,16 @@ function construirRecibos(filas) {
     const icui        = parseFloat(fila.EntDet_ICUI       || 0)
     const estampillas = parseFloat(fila.EntDet_Estampillas|| 0)
     const otros       = parseFloat(fila.EntDet_Otros      || 0)
-    // P.Bruto = Cant × CostoBruto (unitario)
-    const totalBruto  = cantidad * costoBruto
-    const totalNeto   = parseFloat(fila.EntDet_TotalNeto  || (cantidad * costoNeto))
+    // P.Bruto = Cant × CostoBruto — redondeado al peso
+    const totalBruto  = Math.round(cantidad * costoBruto)
+    const totalNeto   = Math.round(parseFloat(fila.EntDet_TotalNeto  || (cantidad * costoNeto)))
     // Base IVA = P.Bruto - Descuento
     const baseIva     = totalBruto - descuento
     // Tasa IVA desde la BD, redondeada a 0, 5 o 19
     const tasaIvaDB   = baseIva > 0 && iva > 0 ? (iva / baseIva) * 100 : 0
     const tasaIva     = tasaIvaDB > 15 ? 19 : tasaIvaDB > 3 ? 5 : 0
-    // Recalcular IVA = Base × Tasa
-    const ivaCalc     = baseIva * (tasaIva / 100)
+    // IVA redondeado al peso
+    const ivaCalc     = Math.round(baseIva * (tasaIva / 100))
 
     if (!numRecibo) continue
 
@@ -102,13 +102,13 @@ function construirRecibos(filas) {
         noFactura:                noFacturaLimpio,
         tipoFactura,
         totalEncabezado: {
-          total:       parseFloat(fila.Ent_Total       || 0),
-          descuentos:  parseFloat(fila.Ent_Descuentos  || 0),
-          bruto:       parseFloat(fila.Ent_Bruto        || 0),
-          iva:         parseFloat(fila.Ent_Iva          || 0),
-          iconsumo:    parseFloat(fila.Ent_IConsumo     || 0),
-          neto:        parseFloat(fila.Ent_Neto         || 0),
-          vrFactura:   parseFloat(fila.Ent_VrFactura    || 0),
+          total:       Math.round(parseFloat(fila.Ent_Total       || 0)),
+          descuentos:  Math.round(parseFloat(fila.Ent_Descuentos  || 0)),
+          bruto:       Math.round(parseFloat(fila.Ent_Bruto        || 0)),
+          iva:         Math.round(parseFloat(fila.Ent_Iva          || 0)),
+          iconsumo:    Math.round(parseFloat(fila.Ent_IConsumo     || 0)),
+          neto:        Math.round(parseFloat(fila.Ent_Neto         || 0)),  // total a pagar redondeado
+          vrFactura:   Math.round(parseFloat(fila.Ent_VrFactura    || 0)),
         },
         productos: [],
         total: 0,
