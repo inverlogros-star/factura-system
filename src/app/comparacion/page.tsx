@@ -262,8 +262,8 @@ export default function ComparacionPage() {
                           ? <CheckSquare size={17} /> : <Square size={17} className="text-gray-400" />}
                       </button>
                     </th>
-                    {['No. Factura','Últ. 4','Proveedor','Fecha','Total Factura','Estado','Recibo asociado','Total Recibo','Resultado',''].map(h => (
-                      <th key={h} className="text-left px-3 py-3 font-medium text-gray-600 whitespace-nowrap">{h}</th>
+                    {['No. Factura','4 díg.','Proveedor','Fecha','T. Factura','Estado','Recibo / No.Fact.','T. Recibo','Res.',''].map(h => (
+                      <th key={h} className="text-left px-2 py-2.5 font-medium text-gray-600 whitespace-nowrap text-xs">{h}</th>
                     ))}
                   </tr>
                 </thead>
@@ -279,55 +279,68 @@ export default function ComparacionPage() {
                         className={`transition-colors ${checked ? 'bg-blue-50' : 'hover:bg-gray-50'} ${puedeSeleccionar ? 'cursor-pointer' : ''}`}
                         onClick={() => puedeSeleccionar && toggleFactura(f.id)}>
 
-                        <td className="px-4 py-3">
+                        {/* Checkbox */}
+                        <td className="px-3 py-2 w-8">
                           {puedeSeleccionar
-                            ? checked ? <CheckSquare size={17} className="text-blue-600" /> : <Square size={17} className="text-gray-300" />
+                            ? checked ? <CheckSquare size={16} className="text-blue-600" /> : <Square size={16} className="text-gray-300" />
                             : <span className="w-4 h-4 block" />}
                         </td>
-                        <td className="px-3 py-3 font-mono font-medium text-sm">{f.numeroFactura}</td>
-                        <td className="px-3 py-3">
-                          <span className="bg-blue-100 text-blue-800 font-bold font-mono px-2 py-0.5 rounded text-xs">
+                        {/* No. Factura */}
+                        <td className="px-2 py-2 font-mono font-semibold text-xs whitespace-nowrap">{f.numeroFactura}</td>
+                        {/* 4 dígitos */}
+                        <td className="px-2 py-2">
+                          <span className="bg-blue-100 text-blue-800 font-bold font-mono px-1.5 py-0.5 rounded text-xs">
                             {ultimos4Digitos(f.numeroFactura)}
                           </span>
                         </td>
-                        <td className="px-3 py-3 text-gray-700 max-w-[180px] truncate">{f.proveedor || '—'}</td>
-                        <td className="px-3 py-3 text-gray-500 whitespace-nowrap">{f.fecha}</td>
-                        <td className="px-3 py-3 font-medium whitespace-nowrap">${fmt(f.total)}</td>
-                        <td className="px-3 py-3">
-                          <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${ESTADO_COLOR[f.estado]}`}>
-                            {f.estado.replace('_', ' ')}
+                        {/* Proveedor */}
+                        <td className="px-2 py-2 text-xs text-gray-700 max-w-[140px]">
+                          <span className="block truncate" title={f.proveedor}>{f.proveedor || '—'}</span>
+                        </td>
+                        {/* Fecha */}
+                        <td className="px-2 py-2 text-xs text-gray-500 whitespace-nowrap">{f.fecha}</td>
+                        {/* Total Factura */}
+                        <td className="px-2 py-2 text-xs font-semibold whitespace-nowrap">${fmt(f.total)}</td>
+                        {/* Estado */}
+                        <td className="px-2 py-2">
+                          <span className={`text-xs px-1.5 py-0.5 rounded-full font-medium whitespace-nowrap ${ESTADO_COLOR[f.estado]}`}>
+                            {f.estado === 'con_diferencias' ? 'dif.' : f.estado === 'conciliada' ? 'OK' : f.estado === 'pendiente' ? 'pend.' : f.estado}
                           </span>
                         </td>
-                        <td className="px-3 py-3 text-xs whitespace-nowrap">
+                        {/* Recibo asociado */}
+                        <td className="px-2 py-2 text-xs whitespace-nowrap">
                           {recibo
                             ? <span className="text-green-700 font-medium flex items-center gap-1">
-                                <CheckCircle2 size={13} /> {recibo.numeroRecibo}
+                                <CheckCircle2 size={12} />
+                                <span>{recibo.numeroRecibo}</span>
                                 {recibo.numeroFacturaProveedor && (
-                                  <span className="bg-green-100 text-green-700 font-mono px-1 rounded ml-1">
+                                  <span className="bg-green-100 text-green-700 font-mono px-1 rounded">
                                     {recibo.numeroFacturaProveedor}
                                   </span>
                                 )}
                               </span>
-                            : <span className="text-gray-400 flex items-center gap-1"><AlertTriangle size={13} className="text-yellow-500" /> Sin recibo</span>}
+                            : <span className="text-gray-400 flex items-center gap-1"><AlertTriangle size={12} className="text-yellow-500" />Sin recibo</span>}
                         </td>
-                        <td className="px-3 py-3 font-medium whitespace-nowrap">
+                        {/* Total Recibo */}
+                        <td className="px-2 py-2 text-xs font-semibold whitespace-nowrap">
                           {recibo ? <span className="text-green-700">${fmt(recibo.total)}</span> : <span className="text-gray-300">—</span>}
                         </td>
-                        <td className="px-3 py-3 whitespace-nowrap">
+                        {/* Resultado */}
+                        <td className="px-2 py-2 whitespace-nowrap">
                           {resultado
-                            ? <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${resultado.tieneDiferencias ? 'bg-red-100 text-red-700' : 'bg-green-100 text-green-700'}`}>
-                                {resultado.tieneDiferencias ? `${resultado.diferencias.length} dif.` : '✓ OK'}
+                            ? <span className={`text-xs font-medium px-1.5 py-0.5 rounded-full ${resultado.tieneDiferencias ? 'bg-red-100 text-red-700' : 'bg-green-100 text-green-700'}`}>
+                                {resultado.tieneDiferencias ? `${resultado.diferencias.length}d` : '✓'}
                               </span>
                             : null}
                         </td>
-                        <td className="px-3 py-3" onClick={e => e.stopPropagation()}>
-                          <div className="flex gap-1">
-                            {resultado && (
-                              <Button size="sm" variant="ghost" onClick={() => setPanelAbierto(resultado)}>
-                                <Eye size={14} className="text-blue-600" />
-                              </Button>
-                            )}
-                          </div>
+                        {/* Acción */}
+                        <td className="px-2 py-2" onClick={e => e.stopPropagation()}>
+                          {resultado && (
+                            <button onClick={() => setPanelAbierto(resultado)}
+                              className="p-1 rounded hover:bg-blue-100 text-blue-600 transition-colors">
+                              <Eye size={14} />
+                            </button>
+                          )}
                         </td>
                       </tr>
                     )
