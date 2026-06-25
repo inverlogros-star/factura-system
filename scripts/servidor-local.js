@@ -125,7 +125,7 @@ async function importarRecibos(fechaInicio, fechaFin) {
     if (r.total === 0) r.total = r.totales.subtotalNeto
   }
 
-  let importados = 0, duplicados = 0, errores = 0
+  let nuevos = 0, actualizados = 0, errores = 0
   let primerError = ''
   for (const r of mapa.values()) {
     const res = await postJSON(`${APP_URL}/api/recibos`, r)
@@ -135,11 +135,11 @@ async function importarRecibos(fechaInicio, fechaFin) {
         primerError = res.error
         log(`PRIMER ERROR: ${primerError}`)
       }
-    } else if (res.ok) importados++
-    else duplicados++
+    } else if (res.actualizado) actualizados++
+    else nuevos++
   }
-  log(`Resultado: ${importados} importados | ${duplicados} duplicados | ${errores} errores`)
-  return { importados, duplicados, errores, total: mapa.size, primerError }
+  log(`Resultado: ${nuevos} nuevos | ${actualizados} actualizados | ${errores} errores`)
+  return { importados: nuevos + actualizados, nuevos, actualizados, errores, total: mapa.size, primerError }
 }
 
 // Página HTML de resultado
@@ -219,10 +219,11 @@ const servidor = http.createServer(async (req, res) => {
       const html = paginaResultado('Importación completada',
         `<h1>✅ Importación completada</h1>
          <div class="num">${result.importados}</div>
-         <p>recibos importados correctamente</p>
+         <p>recibos procesados</p>
          <p style="margin-top:12px">Período: <b>${desde}</b> al <b>${hasta}</b></p>
-         ${result.duplicados > 0 ? `<p style="color:#f59e0b">⚠️ ${result.duplicados} duplicados omitidos</p>` : ''}
-         ${result.errores > 0 ? `<p style="color:#dc2626">❌ ${result.errores} errores</p><p style="color:#dc2626;font-size:11px;margin-top:4px;word-break:break-all">${result.primerError || ''}</p>` : ''}
+         ${result.nuevos > 0 ? `<p style="color:#15803d;margin-top:6px">🆕 ${result.nuevos} recibos nuevos</p>` : ''}
+         ${result.actualizados > 0 ? `<p style="color:#1d4ed8;margin-top:4px">🔄 ${result.actualizados} recibos actualizados (sin duplicar)</p>` : ''}
+         ${result.errores > 0 ? `<p style="color:#dc2626;margin-top:4px">❌ ${result.errores} errores</p><p style="color:#dc2626;font-size:11px;margin-top:4px;word-break:break-all">${result.primerError || ''}</p>` : ''}
          <p style="margin-top:8px;font-size:12px;color:#94a3b8">Recarga la página de Recibos en PACARDYL para verlos</p>`)
       res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' })
       res.end(html)
