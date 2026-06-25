@@ -69,7 +69,8 @@ export default function DetalleRecibo({ recibo, onClose }: { recibo: ReciboMerca
 <style>
   *{margin:0;padding:0;box-sizing:border-box}
   body{font-family:Arial,sans-serif;font-size:11px;color:#111;padding:15px}
-  @media print{body{padding:8px}.no-print{display:none!important}@page{margin:12mm;size:A4 landscape}}
+  @page{size:landscape;margin:12mm}
+  @media print{body{padding:8px}.no-print{display:none!important}@page{size:landscape;margin:12mm}}
   .hdr{background:#15803d;color:#fff;padding:12px 16px;border-radius:6px;margin-bottom:12px}
   .hdr h1{font-size:16px}.hdr h2{font-size:10px;opacity:.85;margin-top:3px}
   .hdr .t{font-size:12px;margin-top:5px;font-weight:bold}.hdr .n{font-size:20px;font-weight:bold}
@@ -89,7 +90,7 @@ export default function DetalleRecibo({ recibo, onClose }: { recibo: ReciboMerca
   .btn{background:#15803d;color:#fff;border:none;padding:8px 20px;border-radius:6px;font-size:13px;cursor:pointer;margin-bottom:12px}
   .ftr{margin-top:12px;border-top:1px solid #e2e8f0;padding-top:8px;display:flex;justify-content:space-between;color:#94a3b8;font-size:9px}
 </style></head><body>
-<button class="btn no-print" onclick="window.print()">🖨️ Imprimir</button>
+<button class="btn no-print" onclick="window.print()">🖨️ Imprimir (Horizontal)</button>
 <div class="hdr">
   <h1>SUPERMERCADOS PACARDYL</h1>
   <h2>INVERSIONES LOGROS S.A. — NIT: 811.031.830-1</h2>

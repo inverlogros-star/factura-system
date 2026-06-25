@@ -49,8 +49,10 @@ export default function DetalleFactura({ factura, onClose }: { factura: Factura;
     @media print {
       body { padding:10px }
       .no-print { display:none !important }
-      @page { margin:15mm; size: A4 landscape }
+      @page { size: landscape; margin: 12mm }
     }
+    /* Forzar horizontal en pantalla también */
+    @page { size: landscape; margin: 12mm }
     .header { background:#1e40af; color:#fff; padding:16px 20px; border-radius:6px; margin-bottom:16px }
     .header h1 { font-size:18px; font-weight:bold }
     .header h2 { font-size:11px; font-weight:normal; margin-top:4px; opacity:0.85 }
@@ -77,7 +79,7 @@ export default function DetalleFactura({ factura, onClose }: { factura: Factura;
   </style>
 </head>
 <body>
-  <button class="btn-print no-print" onclick="window.print()">🖨️ Imprimir</button>
+  <button class="btn-print no-print" onclick="window.print()">🖨️ Imprimir (Horizontal)</button>
 
   <div class="header">
     <h1>SUPERMERCADOS PACARDYL</h1>
