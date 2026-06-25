@@ -30,8 +30,6 @@ export default function RecibosPage() {
   // Importación desde BD
   const [fechaInicio, setFechaInicio] = useState(primerDiaMes())
   const [fechaFin, setFechaFin]       = useState(hoy())
-  const [importandoBD, setImportandoBD] = useState(false)
-  const [resultadoBD, setResultadoBD] = useState<string | null>(null)
 
   const inputRef = useRef<HTMLInputElement>(null)
   const debugRef = useRef<HTMLInputElement>(null)
@@ -75,33 +73,19 @@ export default function RecibosPage() {
     setDebugTexto(data.texto)
   }
 
-  async function importarDesdeBD() {
+  function importarDesdeBD() {
     if (!fechaInicio || !fechaFin) { toast.error('Selecciona ambas fechas'); return }
     if (fechaInicio > fechaFin) { toast.error('La fecha inicial no puede ser mayor a la final'); return }
 
-    setImportandoBD(true)
-    setResultadoBD(null)
-
-    // Verificar si el servidor local está corriendo
-    try {
-      const check = await fetch(`http://localhost:3002/`, { signal: AbortSignal.timeout(2000) })
-      if (check.ok) {
-        // Servidor activo → abrir ventana de importación directamente
-        window.open(`http://localhost:3002/resultado?desde=${fechaInicio}&hasta=${fechaFin}`, '_blank', 'width=520,height=420')
-        toast.success('Importando recibos — espera el resultado en la ventana que se abrió')
-        // Esperar 8 segundos y recargar la lista
-        setTimeout(() => { recargar(); toast.success('Lista de recibos actualizada') }, 8000)
-        setResultadoBD('✅ Importación en curso — ventana abierta')
-        setImportandoBD(false)
-        return
-      }
-    } catch {
-      // Servidor no activo — mostrar instrucción
-    }
-
-    // Servidor no está corriendo → mostrar instrucción para iniciarlo
-    setImportandoBD(false)
-    setResultadoBD('INICIAR_SERVIDOR')
+    // Abrir ventana del servidor local directamente
+    window.open(
+      `http://localhost:3002/resultado?desde=${fechaInicio}&hasta=${fechaFin}`,
+      'importar-recibos',
+      'width=540,height=440,top=200,left=400'
+    )
+    toast.success('Ventana de importación abierta — espera el resultado')
+    // Recargar la lista tras 12 segundos
+    setTimeout(() => recargar(), 12000)
   }
 
   async function eliminarMarcados() {
@@ -182,27 +166,12 @@ export default function RecibosPage() {
             {/* Botón importar */}
             <Button
               onClick={importarDesdeBD}
-              disabled={importandoBD}
               className="bg-blue-700 hover:bg-blue-800"
             >
               <Database size={16} className="mr-2" />
-              {importandoBD ? 'Verificando...' : 'Importar recibos'}
+              Importar recibos
             </Button>
 
-            {/* Resultado */}
-            {resultadoBD === 'INICIAR_SERVIDOR' && (
-              <div className="w-full mt-2 bg-yellow-50 border border-yellow-200 rounded-lg p-4">
-                <p className="text-sm font-semibold text-yellow-800 mb-2">⚠️ El servidor local no está corriendo</p>
-                <p className="text-xs text-yellow-700 mb-3">Haz doble clic en este archivo para iniciarlo (solo una vez):</p>
-                <code className="block bg-gray-900 text-green-400 text-xs px-3 py-2 rounded font-mono mb-3">
-                  C:\Users\SPalacio\Documents\PROYECTO PCARDYL\factura-system\scripts\iniciar-servidor.bat
-                </code>
-                <p className="text-xs text-yellow-600">Una vez iniciado, vuelve a hacer clic en <b>Importar recibos</b></p>
-              </div>
-            )}
-            {resultadoBD && resultadoBD !== 'INICIAR_SERVIDOR' && (
-              <p className="text-sm font-medium text-green-700 mt-2">{resultadoBD}</p>
-            )}
           </div>
           <p className="text-xs text-gray-400 mt-3">
             ℹ️ Requiere el servidor local corriendo (<code className="bg-gray-100 px-1 rounded">iniciar-servidor.bat</code>). Al hacer clic verifica automáticamente si está activo.
