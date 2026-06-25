@@ -253,17 +253,28 @@ export default function ComparacionPage() {
             <p className="text-center text-gray-400 py-10 text-sm">No hay facturas. Ve a Facturas y sube archivos XML.</p>
           ) : (
             <div className="overflow-x-auto">
-              <table className="min-w-max w-full text-sm">
+              <table className="text-sm" style={{ tableLayout: 'fixed', minWidth: '1100px', width: '100%' }}>
                 <thead className="bg-gray-50 border-b">
                   <tr>
-                    <th className="px-4 py-3 w-10">
+                    <th style={{ width: 32 }} className="px-2 py-2.5">
                       <button onClick={toggleTodas} className="text-blue-600">
                         {conRecibo.filter(f => seleccionadas.has(f.id)).length === conRecibo.filter(f => f.estado === 'pendiente').length && conRecibo.filter(f => f.estado === 'pendiente').length > 0
                           ? <CheckSquare size={17} /> : <Square size={17} className="text-gray-400" />}
                       </button>
                     </th>
-                    {['No. Factura','4 díg.','Proveedor','Fecha','T. Factura','Estado','Recibo / No.Fact.','T. Recibo','Res.',''].map(h => (
-                      <th key={h} className="text-left px-2 py-2.5 font-medium text-gray-600 whitespace-nowrap text-xs">{h}</th>
+                    {[
+                      { h: 'No. Factura',       w: 130 },
+                      { h: '4 díg.',            w: 55  },
+                      { h: 'Proveedor',          w: 160 },
+                      { h: 'Fecha',             w: 85  },
+                      { h: 'T. Factura',        w: 100 },
+                      { h: 'Estado',            w: 65  },
+                      { h: 'Recibo / No.Fact.', w: 170 },
+                      { h: 'T. Recibo',         w: 100 },
+                      { h: 'Res.',              w: 50  },
+                      { h: '',                  w: 36  },
+                    ].map(({ h, w }) => (
+                      <th key={h} style={{ width: w }} className="text-left px-2 py-2.5 font-medium text-gray-600 whitespace-nowrap text-xs overflow-hidden text-ellipsis">{h}</th>
                     ))}
                   </tr>
                 </thead>
