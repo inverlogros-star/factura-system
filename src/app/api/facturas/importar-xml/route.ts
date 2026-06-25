@@ -28,6 +28,16 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ ok: true, omitido: true, mensaje: 'Documento vacío ignorado' })
     }
 
+    // Rechazar si el número de factura es un CUFE/UUID (hash hexadecimal >30 chars)
+    // Ocurre cuando el parser no pudo extraer el Invoice del AttachedDocument DIAN
+    if (datos.numeroFactura && datos.numeroFactura.length > 30 &&
+        /^[a-f0-9-]+$/i.test(datos.numeroFactura)) {
+      return NextResponse.json({
+        ok: true, omitido: true,
+        mensaje: `XML malformado: número de factura parece ser un CUFE (${datos.numeroFactura.slice(0, 20)}...) — Invoice interno no encontrado`
+      })
+    }
+
     // Buscar si ya existe por número de factura
     const { rows: existente } = await sql`
       SELECT id, estado FROM facturas WHERE numero_factura = ${datos.numeroFactura} LIMIT 1
