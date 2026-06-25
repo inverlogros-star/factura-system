@@ -86,6 +86,44 @@ async function extraerDocumento(xmlString: string): Promise<{ root: any; tipo: T
   return { root: parsed[rootKey], tipo: detectarTipo(rootKey) }
 }
 
+// NIT de INVERSIONES LOGROS SA (destinatario válido)
+const NIT_LOGROS = '811031830'
+
+function normalizarNit(nit: string): string {
+  return nit.replace(/[.\-\s]/g, '').replace(/\d$/, s => s).slice(0, 9)
+}
+
+function extraerCliente(root: any): { cliente: string; nitCliente: string } {
+  // Buscar en AccountingCustomerParty o BuyerCustomerParty o ReceiverParty
+  const customerParty =
+    get(root, 'AccountingCustomerParty') ||
+    get(root, 'BuyerCustomerParty') ||
+    get(root, 'ReceiverParty')
+
+  const party       = get(customerParty, 'Party') || customerParty
+  const partyName   = get(party, 'PartyName')
+  const legalEntity = get(party, 'PartyLegalEntity')
+  const taxScheme   = get(party, 'PartyTaxScheme')
+
+  const cliente =
+    t(get(partyName, 'Name')) ||
+    t(get(legalEntity, 'RegistrationName')) ||
+    t(get(taxScheme, 'RegistrationName')) || ''
+
+  const companyId =
+    get(taxScheme, 'CompanyID') ||
+    get(legalEntity, 'CompanyID') ||
+    get(party, 'PartyIdentification', 'ID')
+
+  const nitCliente = t(companyId) || ''
+  return { cliente, nitCliente }
+}
+
+export function esDestinatarioValido(nitCliente: string): boolean {
+  const normalizado = normalizarNit(nitCliente)
+  return normalizado.startsWith(NIT_LOGROS) || NIT_LOGROS.startsWith(normalizado)
+}
+
 function extraerProveedor(root: any): { proveedor: string; nitProveedor: string } {
   const supplierParty = get(root, 'AccountingSupplierParty', 'SellerSupplierParty')
   const party = get(supplierParty, 'Party')
@@ -204,6 +242,7 @@ export async function parsearFacturaDIAN(xmlString: string): Promise<Omit<Factur
   const fechaVencimiento = t(get(root, 'DueDate', 'cbc:DueDate')) || undefined
 
   const { proveedor, nitProveedor } = extraerProveedor(root)
+  const { nitCliente } = extraerCliente(root)
 
   // Totales
   const monetary = get(root, 'LegalMonetaryTotal', 'cac:LegalMonetaryTotal')
@@ -233,6 +272,7 @@ export async function parsearFacturaDIAN(xmlString: string): Promise<Omit<Factur
     impuestos,
     total,
     tipoDocumento: tipo,
+    nitCliente,
     xmlRaw: xmlString,
   }
 }

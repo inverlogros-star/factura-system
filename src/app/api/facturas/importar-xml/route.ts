@@ -1,6 +1,6 @@
 import { sql } from '@vercel/postgres'
 import { NextRequest, NextResponse } from 'next/server'
-import { parsearFacturaDIAN } from '@/lib/parser-dian'
+import { parsearFacturaDIAN, esDestinatarioValido } from '@/lib/parser-dian'
 import type { Factura } from '@/types'
 
 export async function POST(req: NextRequest) {
@@ -13,6 +13,14 @@ export async function POST(req: NextRequest) {
     // Rechazar documentos de tipo "otro" — no son facturas ni notas
     if (datos.tipoDocumento === 'otro') {
       return NextResponse.json({ ok: true, omitido: true, mensaje: `Documento tipo "otro" ignorado` })
+    }
+
+    // Rechazar facturas cuyo destinatario NO es Inversiones Logros SA (NIT 811031830)
+    if (datos.nitCliente && !esDestinatarioValido(datos.nitCliente)) {
+      return NextResponse.json({
+        ok: true, omitido: true,
+        mensaje: `Destinatario diferente a Inversiones Logros SA (NIT detectado: ${datos.nitCliente})`
+      })
     }
 
     // Rechazar documentos sin número, sin proveedor y sin productos (vacíos)

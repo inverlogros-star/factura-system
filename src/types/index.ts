@@ -71,6 +71,7 @@ export interface Factura {
   xmlRaw?: string
   correoOrigen?: string
   tipoDocumento?: TipoDocumento
+  nitCliente?: string
   creadoEn: string
 }
 
