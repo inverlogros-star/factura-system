@@ -9,18 +9,20 @@ import {
   Clock,
   Building2,
   BarChart3,
+  Receipt,
   ChevronRight,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
 const nav = [
-  { href: '/', label: 'Dashboard', icon: LayoutDashboard },
-  { href: '/reporte', label: 'Reporte por Fechas', icon: BarChart3 },
-  { href: '/facturas', label: 'Facturas', icon: FileText },
-  { href: '/proveedores', label: 'Por Proveedor / Fecha', icon: Building2 },
-  { href: '/recibos', label: 'Recibos de Mercancía', icon: PackageCheck },
-  { href: '/comparacion', label: 'Comparación', icon: GitCompareArrows },
-  { href: '/pendientes', label: 'Pendientes', icon: Clock },
+  { href: '/',           label: 'Dashboard',            icon: LayoutDashboard },
+  { href: '/reporte',    label: 'Reporte por Fechas',   icon: BarChart3 },
+  { href: '/facturas',   label: 'Facturas',              icon: FileText },
+  { href: '/notas-pos',  label: 'Notas Crédito POS',    icon: Receipt },
+  { href: '/proveedores',label: 'Por Proveedor / Fecha', icon: Building2 },
+  { href: '/recibos',    label: 'Recibos de Mercancía',  icon: PackageCheck },
+  { href: '/comparacion',label: 'Comparación',           icon: GitCompareArrows },
+  { href: '/pendientes', label: 'Pendientes',             icon: Clock },
 ]
 
 export default function Sidebar() {
@@ -39,11 +41,13 @@ export default function Sidebar() {
             className={cn(
               'flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors',
               path === href
-                ? 'bg-blue-50 text-blue-700'
+                ? href === '/notas-pos'
+                  ? 'bg-orange-50 text-orange-700'
+                  : 'bg-blue-50 text-blue-700'
                 : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900'
             )}
           >
-            <Icon size={18} />
+            <Icon size={18} className={path === href && href === '/notas-pos' ? 'text-orange-600' : ''} />
             <span className="flex-1">{label}</span>
             {path === href && <ChevronRight size={14} />}
           </Link>
