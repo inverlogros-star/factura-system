@@ -173,7 +173,13 @@ export default function ComparacionPage() {
       if (!factura) continue
       const recibo = encontrarReciboPorFactura(factura, recibos)
       if (!recibo) { sinRecibo++; continue }
-      const resultado = compararFacturaConRecibo(factura, recibo)
+      // Buscar notas crédito del mismo proveedor
+      const notasCredito = facturas.filter(f =>
+        f.tipoDocumento === 'nota_credito' &&
+        (f.nitProveedor === factura.nitProveedor ||
+         f.proveedor?.toLowerCase() === factura.proveedor?.toLowerCase())
+      )
+      const resultado = compararFacturaConRecibo(factura, recibo, notasCredito)
       await storeComparaciones.save(resultado)
       await storeFacturas.save({ ...factura, estado: resultado.tieneDiferencias ? 'con_diferencias' : 'conciliada', reciboAsociadoId: recibo.id })
       procesadas++

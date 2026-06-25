@@ -74,7 +74,58 @@ function similitud(a: string, b: string): number {
   return Math.min(1, jaccard + bonus)
 }
 
-const UMBRAL_DESC = 0.45  // umbral más permisivo para manejar abreviaturas
+const UMBRAL_DESC = 0.45
+
+// ── Detección de embalaje ─────────────────────────────────────────────────────
+interface InfoEmbalaje {
+  tipo: string
+  unidades: number
+  textoDetectado: string
+}
+
+const PALABRAS_EMBALAJE: Record<string, number> = {
+  'sixpack': 6, 'six pack': 6, 'six-pack': 6,
+  'docena': 12, 'media docena': 6,
+}
+
+function detectarEmbalaje(descripcion: string): InfoEmbalaje | null {
+  if (!descripcion) return null
+  const desc = descripcion.toLowerCase()
+
+  // Palabras fijas
+  for (const [key, uds] of Object.entries(PALABRAS_EMBALAJE)) {
+    if (desc.includes(key)) return { tipo: key, unidades: uds, textoDetectado: key }
+  }
+
+  // Patrones: "X 12", "*12", "x12", "PAC X 6", "CAJA*24", "CAJA X 12 UND", "X24"
+  const patronesNum = [
+    /[x*]\s*(\d+)\s*(und|uds|unid|unidades|un)?/i,  // X 12, *12, x12
+    /caja\s*[x*]?\s*(\d+)/i,
+    /paca?\s*[x*]?\s*(\d+)/i,
+    /pack\s*[x*]?\s*(\d+)/i,
+    /bolsa\s*[x*]?\s*(\d+)/i,
+    /canasta\s*[x*]?\s*(\d+)/i,
+    /fardo\s*[x*]?\s*(\d+)/i,
+    /bandeja\s*[x*]?\s*(\d+)/i,
+    /display\s*[x*]?\s*(\d+)/i,
+    /estuche\s*[x*]?\s*(\d+)/i,
+    /(\d+)\s*(und|uds|unidades)\s*[x*]/i,
+  ]
+
+  for (const patron of patronesNum) {
+    const m = desc.match(patron)
+    if (m) {
+      const uds = parseInt(m[1] || m[2] || '1', 10)
+      if (uds > 1 && uds <= 500) {
+        const tipo = desc.includes('caja') ? 'caja' :
+                     desc.includes('pac') ? 'paca' :
+                     desc.includes('bolsa') ? 'bolsa' : 'embalaje'
+        return { tipo, unidades: uds, textoDetectado: m[0] }
+      }
+    }
+  }
+  return null
+}
 
 // ── Emparejamiento EAN + Descripción ─────────────────────────────────────────
 interface Par {
@@ -186,20 +237,66 @@ export interface NotaAjustePrecio {
   generada: string
 }
 
+// ── Buscar nota crédito que cubra una diferencia ─────────────────────────────
+function buscarNotaCredito(
+  notasCredito: Factura[],
+  nitProveedor: string,
+  codigoProducto: string,
+  descripcion: string,
+  cantidadDif: number
+): { encontrada: boolean; numeroNota: string; cantidadNota: number } {
+  for (const nc of notasCredito) {
+    // Misma proveedor/NIT
+    const mismoProv = nc.nitProveedor === nitProveedor ||
+      normalizarNIT(nc.nitProveedor) === normalizarNIT(nitProveedor)
+    if (!mismoProv) continue
+
+    for (const prod of nc.productos) {
+      const eanNC = limpiarEAN(prod.codigo, prod.descripcion)
+      const eanProd = limpiarEAN(codigoProducto, descripcion)
+      const matchEAN = eanNC && eanProd && eanNC === eanProd
+      const matchDesc = similitud(prod.descripcion, descripcion) >= UMBRAL_DESC
+
+      if (matchEAN || matchDesc) {
+        // La cantidad en la nota crédito cubre (total o parcialmente) la diferencia
+        if (Math.abs(prod.cantidad) >= Math.abs(cantidadDif) * 0.9) {
+          return { encontrada: true, numeroNota: nc.numeroFactura, cantidadNota: prod.cantidad }
+        }
+      }
+    }
+  }
+  return { encontrada: false, numeroNota: '', cantidadNota: 0 }
+}
+
 // ── Comparación principal ─────────────────────────────────────────────────────
 const TOLERANCIA = 0.01
 
 export function compararFacturaConRecibo(
   factura: Factura,
-  recibo: ReciboMercancia
+  recibo: ReciboMercancia,
+  notasCredito: Factura[] = []  // notas crédito del mismo proveedor
 ): ResultadoComparacion {
   const diferencias: Diferencia[] = []
   const { pares, soloFactura, soloRecibo } = emparejarProductos(factura, recibo)
 
   // --- Comparar cada par emparejado ---
   for (const { pf, pr, criterio } of pares) {
-    const cantF = pf.cantidad, cantR = pr.cantidad
-    const precioF = pf.precioUnitario, precioR = pr.precioUnitario
+    // Detectar si la factura viene en embalaje (caja, sixpack, etc.)
+    const embalaje = detectarEmbalaje(pf.descripcion)
+
+    // Cantidad efectiva de la factura en unidades
+    // Si viene en cajas de 12 y la factura dice 5 cajas → 60 unidades
+    const cantF_raw = pf.cantidad
+    const cantF_uds = embalaje ? cantF_raw * embalaje.unidades : cantF_raw
+    const cantR = pr.cantidad
+
+    // Para comparar precios: si hay embalaje, el precio unitario de la factura
+    // es por embalaje, el del recibo es por unidad → convertir
+    const precioF_uds = embalaje ? pf.precioUnitario / embalaje.unidades : pf.precioUnitario
+
+    const cantF = cantF_uds  // cantidad comparable
+    const precioF = precioF_uds
+    const precioR = pr.precioUnitario
     const ivaF = pf.impuesto || 0, ivaR = (pr as any).iva || 0
     const icF = 0, icR = (pr as any).iconsumo || 0
     const ibuaF = 0, ibuaR = (pr as any).ibua || 0
@@ -209,8 +306,22 @@ export function compararFacturaConRecibo(
 
     const difNeta = totalF - totalR
 
-    // 1. Diferencia de cantidad
+    // 1. Diferencia de cantidad (considerando embalaje)
     if (Math.abs(cantF - cantR) > TOLERANCIA) {
+      const difCant = cantF - cantR
+      // Verificar si existe nota crédito que justifique el faltante
+      const nc = notasCredito.length > 0
+        ? buscarNotaCredito(notasCredito, factura.nitProveedor, pf.codigo, pf.descripcion, difCant)
+        : { encontrada: false, numeroNota: '', cantidadNota: 0 }
+
+      const embalajeInfo = embalaje
+        ? ` [Embalaje: ${embalaje.tipo} x${embalaje.unidades} → Fact. ${cantF_raw} ${embalaje.tipo}s = ${cantF_uds} uds]`
+        : ''
+
+      const ncInfo = nc.encontrada
+        ? ` ✅ CUBIERTO por Nota Crédito ${nc.numeroNota} (${nc.cantidadNota} uds)`
+        : ''
+
       diferencias.push({
         tipoDiferencia: 'cantidad',
         codigoFactura: pf.codigo, codigoRecibo: pr.codigo,
@@ -218,8 +329,8 @@ export function compararFacturaConRecibo(
         cantidadFacturada: cantF, cantidadRecibida: cantR,
         precioFactura: precioF, precioRecibo: precioR,
         valorDiferenciaUnitario: precioF,
-        valorDiferenciaTotal: (cantF - cantR) * precioF,
-        nota: `${criterio === 'ean' ? '🔢 EAN' : '📝 Descripción'}: Cantidad facturada ${cantF} ≠ recibida ${cantR}. Diferencia: ${cantF - cantR} uds × $${precioF.toLocaleString('es-CO')} = $${((cantF - cantR) * precioF).toLocaleString('es-CO')}`,
+        valorDiferenciaTotal: nc.encontrada ? 0 : difCant * precioF,
+        nota: `${criterio === 'ean' ? '🔢 EAN' : '📝 Desc.'}: Facturado ${cantF} uds ≠ Recibido ${cantR} uds. Diferencia: ${difCant} uds × $${precioF.toLocaleString('es-CO')} = $${(difCant * precioF).toLocaleString('es-CO')}${embalajeInfo}${ncInfo}`,
       })
     }
 
