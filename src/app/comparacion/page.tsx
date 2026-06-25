@@ -252,9 +252,9 @@ export default function ComparacionPage() {
           {facturasFiltradas.length === 0 ? (
             <p className="text-center text-gray-400 py-10 text-sm">No hay facturas. Ve a Facturas y sube archivos XML.</p>
           ) : (
-            <div className="overflow-x-auto">
+            <div className="overflow-x-auto overflow-y-auto" style={{ maxHeight: 'calc(100vh - 320px)' }}>
               <table className="w-full text-sm">
-                <thead className="bg-gray-50 border-b">
+                <thead className="bg-gray-50 border-b sticky top-0 z-10">
                   <tr>
                     <th className="px-4 py-3 w-10">
                       <button onClick={toggleTodas} className="text-blue-600">
