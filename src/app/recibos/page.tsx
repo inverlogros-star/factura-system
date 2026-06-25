@@ -75,19 +75,33 @@ export default function RecibosPage() {
     setDebugTexto(data.texto)
   }
 
-  const scriptPath = 'C:\\Users\\SPalacio\\Documents\\PROYECTO PCARDYL\\factura-system\\scripts\\importar-recibos-bd.js'
-
   async function importarDesdeBD() {
     if (!fechaInicio || !fechaFin) { toast.error('Selecciona ambas fechas'); return }
     if (fechaInicio > fechaFin) { toast.error('La fecha inicial no puede ser mayor a la final'); return }
-    const cmd = `node "${scriptPath}" ${fechaInicio} ${fechaFin}`
+
+    setImportandoBD(true)
+    setResultadoBD(null)
+
+    // Verificar si el servidor local está corriendo
     try {
-      await navigator.clipboard.writeText(cmd)
-      toast.success('Comando copiado al portapapeles — pégalo en CMD o PowerShell')
+      const check = await fetch(`http://localhost:3002/`, { signal: AbortSignal.timeout(2000) })
+      if (check.ok) {
+        // Servidor activo → abrir ventana de importación directamente
+        window.open(`http://localhost:3002/resultado?desde=${fechaInicio}&hasta=${fechaFin}`, '_blank', 'width=520,height=420')
+        toast.success('Importando recibos — espera el resultado en la ventana que se abrió')
+        // Esperar 8 segundos y recargar la lista
+        setTimeout(() => { recargar(); toast.success('Lista de recibos actualizada') }, 8000)
+        setResultadoBD('✅ Importación en curso — ventana abierta')
+        setImportandoBD(false)
+        return
+      }
     } catch {
-      toast.info('Copia el comando manualmente')
+      // Servidor no activo — mostrar instrucción
     }
-    setResultadoBD(cmd)
+
+    // Servidor no está corriendo → mostrar instrucción para iniciarlo
+    setImportandoBD(false)
+    setResultadoBD('INICIAR_SERVIDOR')
   }
 
   async function eliminarMarcados() {
@@ -172,26 +186,26 @@ export default function RecibosPage() {
               className="bg-blue-700 hover:bg-blue-800"
             >
               <Database size={16} className="mr-2" />
-              {importandoBD ? 'Generando...' : 'Generar comando'}
+              {importandoBD ? 'Verificando...' : 'Importar recibos'}
             </Button>
 
             {/* Resultado */}
-            {resultadoBD && (
-              <div className="w-full mt-2">
-                <p className="text-xs text-gray-500 mb-1">Ejecuta este comando en tu PC (CMD o PowerShell):</p>
-                <div className="flex items-center gap-2">
-                  <code className="flex-1 bg-gray-900 text-green-400 text-xs px-3 py-2 rounded font-mono break-all">
-                    {resultadoBD}
-                  </code>
-                  <Button size="sm" variant="outline" onClick={() => navigator.clipboard.writeText(resultadoBD).then(() => toast.success('Copiado'))}>
-                    Copiar
-                  </Button>
-                </div>
+            {resultadoBD === 'INICIAR_SERVIDOR' && (
+              <div className="w-full mt-2 bg-yellow-50 border border-yellow-200 rounded-lg p-4">
+                <p className="text-sm font-semibold text-yellow-800 mb-2">⚠️ El servidor local no está corriendo</p>
+                <p className="text-xs text-yellow-700 mb-3">Haz doble clic en este archivo para iniciarlo (solo una vez):</p>
+                <code className="block bg-gray-900 text-green-400 text-xs px-3 py-2 rounded font-mono mb-3">
+                  C:\Users\SPalacio\Documents\PROYECTO PCARDYL\factura-system\scripts\iniciar-servidor.bat
+                </code>
+                <p className="text-xs text-yellow-600">Una vez iniciado, vuelve a hacer clic en <b>Importar recibos</b></p>
               </div>
+            )}
+            {resultadoBD && resultadoBD !== 'INICIAR_SERVIDOR' && (
+              <p className="text-sm font-medium text-green-700 mt-2">{resultadoBD}</p>
             )}
           </div>
           <p className="text-xs text-gray-400 mt-3">
-            ℹ️ El MySQL está en la red local (192.168.11.251) — el comando se ejecuta desde tu PC, los datos se suben automáticamente al sistema.
+            ℹ️ Requiere el servidor local corriendo (<code className="bg-gray-100 px-1 rounded">iniciar-servidor.bat</code>). Al hacer clic verifica automáticamente si está activo.
           </p>
         </CardContent>
       </Card>
