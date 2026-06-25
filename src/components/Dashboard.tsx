@@ -2,7 +2,7 @@
 import { useEffect, useState } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
-import { FileText, PackageCheck, AlertTriangle, Clock, CheckCircle2, XCircle } from 'lucide-react'
+import { FileText, PackageCheck, AlertTriangle, Clock, CheckCircle2, XCircle, GitCompareArrows, ShieldCheck } from 'lucide-react'
 import { storeFacturas, storeRecibos, storeComparaciones } from '@/lib/store'
 import type { Factura, ReciboMercancia, ResultadoComparacion } from '@/types'
 import Link from 'next/link'
@@ -18,18 +18,25 @@ export default function Dashboard() {
     storeComparaciones.getAll().then(setComparaciones)
   }, [])
 
-  const pendientes = facturas.filter(f => f.estado === 'pendiente').length
+  const pendientes     = facturas.filter(f => f.estado === 'pendiente').length
   const conDiferencias = facturas.filter(f => f.estado === 'con_diferencias').length
-  const conciliadas = facturas.filter(f => f.estado === 'conciliada').length
-  const rechazadas = facturas.filter(f => f.estado === 'rechazada').length
+  const conciliadas    = facturas.filter(f => f.estado === 'conciliada').length
+  const rechazadas     = facturas.filter(f => f.estado === 'rechazada').length
+
+  // Comparaciones
+  const compConDif    = comparaciones.filter(c => c.tieneDiferencias).length
+  const compSinDif    = comparaciones.filter(c => !c.tieneDiferencias).length
+  const totalComparadas = comparaciones.length
 
   const stats = [
-    { label: 'Total Facturas', value: facturas.length, icon: FileText, color: 'text-blue-600', bg: 'bg-blue-50' },
-    { label: 'Recibos Cargados', value: recibos.length, icon: PackageCheck, color: 'text-green-600', bg: 'bg-green-50' },
-    { label: 'Pendientes', value: pendientes, icon: Clock, color: 'text-yellow-600', bg: 'bg-yellow-50' },
-    { label: 'Con Diferencias', value: conDiferencias, icon: AlertTriangle, color: 'text-red-600', bg: 'bg-red-50' },
-    { label: 'Conciliadas', value: conciliadas, icon: CheckCircle2, color: 'text-emerald-600', bg: 'bg-emerald-50' },
-    { label: 'Rechazadas', value: rechazadas, icon: XCircle, color: 'text-gray-600', bg: 'bg-gray-100' },
+    { label: 'Total Facturas',      value: facturas.length, icon: FileText,         color: 'text-blue-600',   bg: 'bg-blue-50',   href: '/facturas' },
+    { label: 'Recibos Cargados',    value: recibos.length,  icon: PackageCheck,     color: 'text-green-600',  bg: 'bg-green-50',  href: '/recibos' },
+    { label: 'Pendientes',          value: pendientes,      icon: Clock,            color: 'text-yellow-600', bg: 'bg-yellow-50', href: '/pendientes' },
+    { label: 'Total Comparadas',    value: totalComparadas, icon: GitCompareArrows, color: 'text-blue-700',   bg: 'bg-blue-100',  href: '/comparacion' },
+    { label: 'Comparadas con dif.', value: compConDif,      icon: AlertTriangle,    color: 'text-red-600',    bg: 'bg-red-50',    href: '/comparacion' },
+    { label: 'Comparadas sin dif.', value: compSinDif,      icon: ShieldCheck,      color: 'text-emerald-600',bg: 'bg-emerald-50',href: '/comparacion' },
+    { label: 'Conciliadas',         value: conciliadas,     icon: CheckCircle2,     color: 'text-emerald-600',bg: 'bg-emerald-50',href: '/comparacion' },
+    { label: 'Con Diferencias',     value: conDiferencias,  icon: XCircle,          color: 'text-red-600',    bg: 'bg-red-100',   href: '/comparacion' },
   ]
 
   const recientes = comparaciones.slice(0, 5)
@@ -41,19 +48,21 @@ export default function Dashboard() {
         <p className="text-gray-500 text-sm mt-1">Resumen del sistema de conciliación de facturas</p>
       </div>
 
-      <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-        {stats.map(({ label, value, icon: Icon, color, bg }) => (
-          <Card key={label}>
-            <CardContent className="p-5 flex items-center gap-4">
-              <div className={`p-3 rounded-lg ${bg}`}>
-                <Icon className={color} size={22} />
-              </div>
-              <div>
-                <p className="text-2xl font-bold text-gray-900">{value}</p>
-                <p className="text-sm text-gray-500">{label}</p>
-              </div>
-            </CardContent>
-          </Card>
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        {stats.map(({ label, value, icon: Icon, color, bg, href }) => (
+          <Link key={label} href={href}>
+            <Card className="hover:shadow-md transition-shadow cursor-pointer">
+              <CardContent className="p-4 flex items-center gap-3">
+                <div className={`p-2.5 rounded-lg ${bg} shrink-0`}>
+                  <Icon className={color} size={20} />
+                </div>
+                <div>
+                  <p className="text-2xl font-bold text-gray-900">{value}</p>
+                  <p className="text-xs text-gray-500 leading-tight">{label}</p>
+                </div>
+              </CardContent>
+            </Card>
+          </Link>
         ))}
       </div>
 
