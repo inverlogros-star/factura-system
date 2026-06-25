@@ -696,10 +696,28 @@ function palabrasSignificativas(nombre: string): string[] {
     .filter(p => p.length > 3 && !PALABRAS_GENERICAS.has(p))
 }
 
+// Identifica si una nota crédito es de origen POS (no debe compararse con recibos)
+function esNotaCreditoPOS(factura: Factura): boolean {
+  if (factura.tipoDocumento !== 'nota_credito') return false
+  const prov = (factura.proveedor || '').toLowerCase()
+  const nit  = (factura.nitProveedor || '').replace(/\D/g, '')
+  const num  = (factura.numeroFactura || '').toLowerCase()
+  // NITs internos conocidos o proveedores POS
+  if (nit === '222222222' || nit === '99' || nit === '0') return true
+  if (prov.includes('lista de costos') || prov.includes('pos ') || prov.includes(' pos')) return true
+  if (num.includes('pos') || num.startsWith('nc') || num.startsWith('pos')) return true
+  // Sin proveedor real = probablemente POS interno
+  if (!factura.nitProveedor && !factura.proveedor) return true
+  return false
+}
+
 export function encontrarReciboPorFactura(
   factura: Factura,
   recibos: ReciboMercancia[]
 ): ReciboMercancia | undefined {
+  // Las notas crédito de POS NO se comparan con recibos de mercancía
+  if (esNotaCreditoPOS(factura)) return undefined
+
   const digitos = ultimos4Digitos(factura.numeroFactura)
   const nitFact = normalizarNIT(factura.nitProveedor || '')
 

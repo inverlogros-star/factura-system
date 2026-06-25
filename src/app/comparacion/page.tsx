@@ -195,9 +195,11 @@ export default function ComparacionPage() {
   }
 
   async function compararTodo() {
-    // Comparar TODAS las facturas que tengan recibo detectado y no estén ya comparadas
+    // Comparar solo facturas (no notas crédito POS) que tengan recibo detectado
     const pendientes = facturas.filter(f =>
-      f.estado === 'pendiente' && !!encontrarReciboPorFactura(f, recibos)
+      f.estado === 'pendiente' &&
+      f.tipoDocumento !== 'nota_credito' &&  // excluir notas crédito
+      !!encontrarReciboPorFactura(f, recibos)
     )
     if (pendientes.length === 0) { toast.info('No hay facturas pendientes con recibo para comparar'); return }
     setProcesando(true)
@@ -363,7 +365,8 @@ export default function ComparacionPage() {
                     const recibo    = encontrarReciboPorFactura(f, recibos)
                     const checked   = seleccionadas.has(f.id)
                     const resultado = resultadosPorFactura[f.id]
-                    const puedeSeleccionar = f.estado === 'pendiente' && !!recibo
+                    const esNCPOS   = f.tipoDocumento === 'nota_credito'
+                    const puedeSeleccionar = f.estado === 'pendiente' && !!recibo && !esNCPOS
 
                     return (
                       <tr key={f.id}
@@ -400,7 +403,9 @@ export default function ComparacionPage() {
                         </td>
                         {/* Recibo asociado */}
                         <td className="px-2 py-2 text-xs whitespace-nowrap">
-                          {recibo
+                          {esNCPOS
+                            ? <span className="text-gray-400 italic">N.C. POS — no aplica</span>
+                            : recibo
                             ? <span className="text-green-700 font-medium flex items-center gap-1">
                                 <CheckCircle2 size={12} />
                                 <span>{recibo.numeroRecibo}</span>
