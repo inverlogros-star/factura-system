@@ -8,12 +8,14 @@ import {
   GitCompareArrows,
   Clock,
   Building2,
+  BarChart3,
   ChevronRight,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
 const nav = [
   { href: '/', label: 'Dashboard', icon: LayoutDashboard },
+  { href: '/reporte', label: 'Reporte por Fechas', icon: BarChart3 },
   { href: '/facturas', label: 'Facturas', icon: FileText },
   { href: '/proveedores', label: 'Por Proveedor / Fecha', icon: Building2 },
   { href: '/recibos', label: 'Recibos de Mercancía', icon: PackageCheck },
