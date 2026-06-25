@@ -14,6 +14,19 @@ function fmtN(n: number | undefined) {
 export default function DetalleRecibo({ recibo, onClose }: { recibo: ReciboMercancia; onClose: () => void }) {
   const t = recibo.totales
 
+  // Fecha y hora del recibo (tal como viene del sistema)
+  const fechaRecibo = recibo.fecha || '—'
+  // Fecha y hora de generación del documento
+  const ahora = new Date()
+  const fechaGeneracion = ahora.toLocaleDateString('es-CO', {
+    year: 'numeric', month: 'long', day: 'numeric',
+    timeZone: 'America/Bogota'
+  })
+  const horaGeneracion = ahora.toLocaleTimeString('es-CO', {
+    hour: '2-digit', minute: '2-digit', second: '2-digit',
+    timeZone: 'America/Bogota'
+  })
+
   // Determinar tasas IVA presentes
   const tasas5  = recibo.productos.filter(p => (p as any).tasaIva === 5)
   const tasas19 = recibo.productos.filter(p => (p as any).tasaIva === 19)
@@ -86,8 +99,12 @@ export default function DetalleRecibo({ recibo, onClose }: { recibo: ReciboMerca
 <div class="grid">
   <div class="box"><div class="l">Proveedor</div><div class="v">${recibo.proveedor || '—'}</div></div>
   <div class="box"><div class="l">NIT Proveedor</div><div class="v">${recibo.nitProveedor || '—'}</div></div>
-  <div class="box"><div class="l">Fecha recepción</div><div class="v">${recibo.fecha || '—'}</div></div>
+  <div class="box hl"><div class="l">📅 Fecha del Recibo</div><div class="v" style="color:#15803d;font-size:15px">${fechaRecibo}</div></div>
   <div class="box hl"><div class="l">No. Factura Proveedor</div><div class="v">${recibo.numeroFacturaProveedor || '—'}</div></div>
+</div>
+<div style="background:#f0fdf4;border:1px solid #86efac;border-radius:5px;padding:7px 14px;margin-bottom:12px;display:flex;justify-content:space-between;align-items:center">
+  <span style="color:#15803d;font-size:12px"><b>Fecha del Recibo de Mercancía:</b>&nbsp;${fechaRecibo}</span>
+  <span style="color:#94a3b8;font-size:11px"><b>Documento generado:</b>&nbsp;${fechaGeneracion},&nbsp;${horaGeneracion}</span>
 </div>
 <table>
   <thead><tr>
@@ -150,10 +167,10 @@ export default function DetalleRecibo({ recibo, onClose }: { recibo: ReciboMerca
         {/* Info principal */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
           {[
-            { label: 'Fecha recepción',       value: recibo.fecha || '—' },
-            { label: 'Proveedor',             value: recibo.proveedor || '—' },
-            { label: 'NIT',                   value: recibo.nitProveedor || '—' },
-            { label: 'No. Factura Proveedor', value: recibo.numeroFacturaProveedor || '—', destacado: true },
+            { label: '📅 Fecha del Recibo',    value: fechaRecibo,                           destacado: true },
+            { label: 'Proveedor',              value: recibo.proveedor || '—' },
+            { label: 'NIT',                    value: recibo.nitProveedor || '—' },
+            { label: 'No. Factura Proveedor',  value: recibo.numeroFacturaProveedor || '—', destacado: true },
           ].map(({ label, value, destacado }) => (
             <div key={label} className={`rounded-lg border p-4 ${destacado ? 'bg-green-50 border-green-200' : 'bg-white'}`}>
               <p className="text-xs text-gray-500 mb-1">{label}</p>
@@ -288,6 +305,15 @@ export default function DetalleRecibo({ recibo, onClose }: { recibo: ReciboMerca
               </tfoot>
             </table>
           </div>
+        </div>
+        {/* Pie con fechas */}
+        <div className="flex items-center justify-between px-4 py-3 bg-gray-50 border-t rounded-b-lg text-xs text-gray-500">
+          <span>
+            📅 <span className="font-semibold text-green-700">Fecha del Recibo:</span> {fechaRecibo}
+          </span>
+          <span>
+            🖨️ <span className="font-semibold">Generado:</span> {fechaGeneracion}, {horaGeneracion}
+          </span>
         </div>
       </div>
     </div>
