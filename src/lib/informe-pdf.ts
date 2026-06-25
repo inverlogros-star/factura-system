@@ -59,69 +59,59 @@ export async function generarInformePDF(
   doc.text(`Generado: ${fechaHoy} ${horaHoy}`, pageW - 14, 17, { align: 'right' })
   doc.text(`Proveedor: ${resultado.proveedor || '—'} | NIT: ${nitProveedor}`, pageW - 14, 23, { align: 'right' })
 
-  // ── INFO FACTURA / RECIBO ────────────────────────────────────────────────────
-  doc.setTextColor(0, 0, 0)
-  let y = 33
-
-  doc.setFillColor(241, 245, 249)
-  doc.rect(10, y - 4, pageW - 20, 26, 'F')
-  doc.setDrawColor(200, 210, 230)
-  doc.rect(10, y - 4, pageW - 20, 26, 'S')
-
-  const col1 = 14, col2 = 95, col3 = 180, col4 = 240
-
-  doc.setFontSize(8.5)
-
-  // Fila 1
-  doc.setFont('helvetica', 'bold'); doc.text('Proveedor:', col1, y)
-  doc.setFont('helvetica', 'normal'); doc.text(resultado.proveedor || '—', col1 + 22, y)
-
-  doc.setFont('helvetica', 'bold'); doc.text('NIT:', col2, y)
-  doc.setFont('helvetica', 'normal'); doc.text(nitProveedor, col2 + 10, y)
-
-  doc.setFont('helvetica', 'bold'); doc.text('No. Factura:', col3, y)
-  doc.setFont('helvetica', 'normal'); doc.text(resultado.numeroFactura, col3 + 24, y)
-
-  doc.setFont('helvetica', 'bold'); doc.text('Últ. 4:', col4, y)
-  doc.setFont('helvetica', 'normal'); doc.text(resultado.numeroFactura.replace(/\D/g,'').slice(-4), col4 + 14, y)
-
-  // Fila 2
-  doc.setFont('helvetica', 'bold'); doc.text('📅 Fecha Recibo:', col1, y + 7)
-  doc.setTextColor(21, 128, 61); doc.setFont('helvetica', 'bold')
-  doc.text(fechaRecibo, col1 + 32, y + 7)
+  // ── INFO FACTURA / RECIBO — tabla de cabecera legible ────────────────────────
   doc.setTextColor(0, 0, 0)
 
-  doc.setFont('helvetica', 'bold'); doc.text('No. Recibo:', col2, y + 7)
-  doc.setFont('helvetica', 'normal'); doc.text(resultado.numeroRecibo, col2 + 22, y + 7)
+  const difColor = Math.abs(resultado.valorDiferenciaTotal) > 0.01
+    ? [185, 28, 28] : [21, 128, 61]
 
-  doc.setFont('helvetica', 'bold'); doc.text('IVA Facturado:', col3, y + 7)
-  doc.setFont('helvetica', 'normal'); doc.text(`$${fmt(factura.impuestos)}`, col3 + 28, y + 7)
+  // Tabla de cabecera con autoTable — dos secciones (identificación + valores)
+  autoTable(doc, {
+    startY: 31,
+    head: [['Proveedor', 'NIT Proveedor', 'No. Factura', 'Fecha del Recibo', 'No. Recibo']],
+    body: [[
+      resultado.proveedor || '—',
+      nitProveedor,
+      resultado.numeroFactura,
+      fechaRecibo,
+      resultado.numeroRecibo,
+    ]],
+    columnStyles: { 0:{cellWidth:72}, 1:{cellWidth:40}, 2:{cellWidth:40}, 3:{cellWidth:40,fontStyle:'bold',textColor:[21,128,61]}, 4:{cellWidth:40} },
+    headStyles: { fillColor: [220,225,240], textColor:[60,60,80], fontStyle:'bold', fontSize:7.5 },
+    bodyStyles: { fontStyle:'bold', fontSize:9, fillColor:[245,247,252] },
+    styles: { overflow:'linebreak', cellPadding:3 },
+    margin: { left:10, right:10 },
+  })
 
-  doc.setFont('helvetica', 'bold'); doc.text('Total Fact.:', col4, y + 7)
-  doc.setTextColor(30, 64, 175); doc.setFont('helvetica', 'bold')
-  doc.text(`$${fmt(factura.total)}`, col4 + 22, y + 7)
-  doc.setTextColor(0, 0, 0)
+  autoTable(doc, {
+    startY: (doc as any).lastAutoTable.finalY + 2,
+    head: [['Subtotal sin IVA', 'IVA Facturado', 'Total Factura', 'Total Recibo', 'Diferencia Total']],
+    body: [[
+      `$${fmt(factura.subtotal)}`,
+      `$${fmt(factura.impuestos)}`,
+      `$${fmt(factura.total)}`,
+      `$${fmt(resultado.valorTotalRecibo)}`,
+      `$${fmt(resultado.valorDiferenciaTotal)}`,
+    ]],
+    columnStyles: {
+      0:{cellWidth:72}, 1:{cellWidth:40},
+      2:{cellWidth:40, fontStyle:'bold', textColor:[30,64,175]},
+      3:{cellWidth:40},
+      4:{cellWidth:40, fontStyle:'bold', textColor: difColor as [number,number,number]},
+    },
+    headStyles: { fillColor:[220,225,240], textColor:[60,60,80], fontStyle:'bold', fontSize:7.5 },
+    bodyStyles: { fontStyle:'bold', fontSize:10, fillColor:[245,247,252] },
+    styles: { overflow:'linebreak', cellPadding:3 },
+    margin: { left:10, right:10 },
+    didParseCell(data) {
+      if (data.section === 'body' && data.column.index === 4) {
+        data.cell.styles.fontSize = 12
+      }
+    }
+  })
 
-  // Fila 3
-  doc.setFont('helvetica', 'bold'); doc.text('Total Mercancía (sin IVA):', col1, y + 14)
-  doc.setFont('helvetica', 'normal'); doc.text(`$${fmt(factura.subtotal)}`, col1 + 48, y + 14)
-
-  doc.setFont('helvetica', 'bold'); doc.text('Total Recibo:', col2, y + 14)
-  doc.setFont('helvetica', 'normal'); doc.text(`$${fmt(resultado.valorTotalRecibo)}`, col2 + 26, y + 14)
-
-  doc.setFont('helvetica', 'bold'); doc.text('Diferencia Total:', col3, y + 14)
-  const diffColor = resultado.valorDiferenciaTotal !== 0 ? [185, 28, 28] as const : [21, 128, 61] as const
-  doc.setTextColor(diffColor[0], diffColor[1], diffColor[2])
-  doc.setFont('helvetica', 'bold')
-  doc.text(`$${fmt(resultado.valorDiferenciaTotal)}`, col3 + 32, y + 14)
-  doc.setTextColor(0, 0, 0)
-
-  doc.setFont('helvetica', 'bold'); doc.text('Generado:', col4, y + 14)
-  doc.setFont('helvetica', 'normal'); doc.setFontSize(7.5)
-  doc.text(`${fechaHoy} ${horaHoy}`, col4 + 19, y + 14)
-  doc.setFontSize(8.5)
-
-  y += 30
+  let y = (doc as any).lastAutoTable.finalY + 6
+  const diffColor = difColor as [number, number, number]
 
   // ── TABLA DETALLE ────────────────────────────────────────────────────────────
   doc.setFontSize(9.5)
