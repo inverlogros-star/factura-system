@@ -1,8 +1,8 @@
 'use client'
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState, useMemo } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
-import { Upload, Trash2, PackageCheck, Eye, FileSpreadsheet, FileText, FileCode, Bug, CheckSquare, Square, Database, CalendarIcon } from 'lucide-react'
+import { Upload, Trash2, PackageCheck, Eye, FileSpreadsheet, FileText, FileCode, Bug, CheckSquare, Square, Database, CalendarIcon, BarChart2, ChevronDown, ChevronUp } from 'lucide-react'
 import { parsearReciboXML } from '@/lib/parser-dian'
 import { parsearReciboExcel } from '@/lib/parser-recibo-excel'
 import { parsearReciboPDF } from '@/lib/parser-recibo-pdf'
@@ -26,6 +26,28 @@ export default function RecibosPage() {
   const [seleccionado, setSeleccionado] = useState<ReciboMercancia | null>(null)
   const [marcados, setMarcados]       = useState<Set<string>>(new Set())
   const [debugTexto, setDebugTexto]   = useState<string | null>(null)
+  const [mostrarContador, setMostrarContador] = useState(true)
+
+  // Agrupar recibos por fecha para el contador diario
+  const contadorPorDia = useMemo(() => {
+    const mapa = new Map<string, { cantidad: number; total: number; proveedores: Set<string> }>()
+    for (const r of recibos) {
+      const fecha = r.fecha || 'Sin fecha'
+      if (!mapa.has(fecha)) mapa.set(fecha, { cantidad: 0, total: 0, proveedores: new Set() })
+      const d = mapa.get(fecha)!
+      d.cantidad++
+      d.total += Number(r.total)
+      if (r.proveedor) d.proveedores.add(r.proveedor)
+    }
+    return [...mapa.entries()]
+      .sort(([a], [b]) => b.localeCompare(a))
+      .map(([fecha, data]) => ({
+        fecha,
+        cantidad: data.cantidad,
+        total: data.total,
+        proveedores: data.proveedores.size,
+      }))
+  }, [recibos])
 
   // Importación desde BD
   const [fechaInicio, setFechaInicio] = useState(primerDiaMes())
@@ -203,6 +225,68 @@ export default function RecibosPage() {
           <CardContent>
             <pre className="text-xs bg-gray-50 p-3 rounded border overflow-auto max-h-80 whitespace-pre-wrap font-mono">{debugTexto}</pre>
           </CardContent>
+        </Card>
+      )}
+
+      {/* ── Contador de recibos por día ─────────────────────────────────── */}
+      {recibos.length > 0 && (
+        <Card className="border-green-200">
+          <CardHeader className="pb-2 cursor-pointer" onClick={() => setMostrarContador(v => !v)}>
+            <div className="flex items-center justify-between">
+              <CardTitle className="text-sm flex items-center gap-2 text-green-700">
+                <BarChart2 size={16} /> Contador de Recibos por Día
+                <span className="ml-2 bg-green-100 text-green-700 text-xs font-bold px-2 py-0.5 rounded-full">
+                  {recibos.length} recibos · {contadorPorDia.length} día(s)
+                </span>
+              </CardTitle>
+              {mostrarContador ? <ChevronUp size={16} className="text-gray-400" /> : <ChevronDown size={16} className="text-gray-400" />}
+            </div>
+          </CardHeader>
+          {mostrarContador && (
+            <CardContent className="p-0">
+              <table className="w-full text-sm">
+                <thead className="bg-green-50 border-b border-green-100">
+                  <tr>
+                    <th className="text-left px-4 py-2.5 font-semibold text-green-800 text-xs">Fecha</th>
+                    <th className="text-center px-4 py-2.5 font-semibold text-green-800 text-xs">Recibos del día</th>
+                    <th className="text-center px-4 py-2.5 font-semibold text-green-800 text-xs">Proveedores</th>
+                    <th className="text-right px-4 py-2.5 font-semibold text-green-800 text-xs">Total recibido</th>
+                    <th className="text-right px-4 py-2.5 font-semibold text-green-800 text-xs">Promedio / recibo</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-100">
+                  {contadorPorDia.map(({ fecha, cantidad, total, proveedores }) => (
+                    <tr key={fecha} className="hover:bg-green-50 transition-colors">
+                      <td className="px-4 py-2.5 font-semibold text-gray-800">{fecha}</td>
+                      <td className="px-4 py-2.5 text-center">
+                        <span className="inline-flex items-center justify-center bg-green-600 text-white text-sm font-bold rounded-full w-8 h-8">
+                          {cantidad}
+                        </span>
+                      </td>
+                      <td className="px-4 py-2.5 text-center text-gray-600">{proveedores}</td>
+                      <td className="px-4 py-2.5 text-right font-bold text-green-700">
+                        ${Math.round(total).toLocaleString('es-CO')}
+                      </td>
+                      <td className="px-4 py-2.5 text-right text-gray-500 text-xs">
+                        ${Math.round(total / cantidad).toLocaleString('es-CO')}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+                <tfoot className="bg-gray-50 border-t-2 border-gray-200">
+                  <tr>
+                    <td className="px-4 py-2.5 font-bold text-gray-700">TOTAL</td>
+                    <td className="px-4 py-2.5 text-center font-bold text-green-700">{recibos.length}</td>
+                    <td className="px-4 py-2.5 text-center text-gray-500">—</td>
+                    <td className="px-4 py-2.5 text-right font-bold text-green-700">
+                      ${Math.round(recibos.reduce((s, r) => s + Number(r.total), 0)).toLocaleString('es-CO')}
+                    </td>
+                    <td className="px-4 py-2.5"></td>
+                  </tr>
+                </tfoot>
+              </table>
+            </CardContent>
+          )}
         </Card>
       )}
 
