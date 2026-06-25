@@ -110,4 +110,5 @@ export interface ResultadoComparacion {
   valorTotalRecibo: number
   valorDiferenciaTotal: number
   estado: 'ok' | 'con_diferencias' | 'pendiente_recibo'
+  notaAjuste?: any  // NotaAjustePrecio | null
 }

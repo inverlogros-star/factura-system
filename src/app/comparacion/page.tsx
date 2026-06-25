@@ -3,7 +3,7 @@ import { useEffect, useState, useMemo } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { GitCompareArrows, ChevronDown, ChevronUp, FileDown, Trash2, CheckSquare, Square, Eye, AlertTriangle, CheckCircle2, Search } from 'lucide-react'
+import { GitCompareArrows, ChevronDown, ChevronUp, FileDown, Trash2, CheckSquare, Square, Eye, AlertTriangle, CheckCircle2, Search, FileWarning } from 'lucide-react'
 import { storeFacturas, storeRecibos, storeComparaciones } from '@/lib/store'
 import { compararFacturaConRecibo, encontrarReciboPorFactura, ultimos4Digitos } from '@/lib/comparador'
 import { generarInformePDF } from '@/lib/informe-pdf'
@@ -45,6 +45,15 @@ function PanelDiferencias({ resultado, factura, onClose, onEliminar }: {
     catch (e) { toast.error(`Error: ${(e as Error).message}`) }
   }
 
+  async function descargarNotaAjuste() {
+    if (!resultado.notaAjuste) return
+    try {
+      const { generarNotaAjustePDF } = await import('@/lib/nota-ajuste-pdf')
+      await generarNotaAjustePDF(resultado.notaAjuste)
+      toast.success('Nota de Ajuste generada')
+    } catch (e) { toast.error(`Error: ${(e as Error).message}`) }
+  }
+
   return (
     <div className="fixed inset-0 z-50 flex flex-col bg-white">
       <div className="flex items-center justify-between px-8 py-4 border-b bg-white shrink-0">
@@ -59,6 +68,11 @@ function PanelDiferencias({ resultado, factura, onClose, onEliminar }: {
             ? <Badge variant="destructive">{resultado.diferencias.length} diferencia(s)</Badge>
             : <Badge className="bg-green-100 text-green-800">Sin diferencias ✓</Badge>}
           <Button variant="outline" onClick={descargarPDF}><FileDown size={15} className="mr-1.5" /> PDF</Button>
+          {resultado.notaAjuste && (
+            <Button variant="outline" onClick={descargarNotaAjuste} className="border-orange-300 text-orange-700 hover:bg-orange-50">
+              <FileWarning size={15} className="mr-1.5" /> Nota de Ajuste
+            </Button>
+          )}
           <Button variant="ghost" onClick={onEliminar}><Trash2 size={15} className="text-red-500" /></Button>
           <button onClick={onClose} className="p-2 rounded-full hover:bg-gray-100">✕</button>
         </div>

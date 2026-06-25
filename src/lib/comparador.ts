@@ -1,202 +1,367 @@
-import type { Factura, ReciboMercancia, Diferencia, ResultadoComparacion } from '@/types'
+import type { Factura, ReciboMercancia, ProductoFactura, ProductoRecibo, Diferencia, ResultadoComparacion } from '@/types'
 
-const TOLERANCIA_PRECIO = 0.01
-const SIMILITUD_DESCRIPCION = 0.7
-
-// Devuelve los últimos 4 dígitos numéricos del número de factura
-export function ultimos4Digitos(numeroFactura: string): string {
-  const soloDigitos = numeroFactura.replace(/\D/g, '')
-  return soloDigitos.slice(-4)
-}
-
-// Normaliza NIT: quita guiones, puntos y dígito verificador → solo dígitos base
-function normalizarNIT(nit: string): string {
-  return nit.replace(/[.\-\s]/g, '').replace(/\d$/, s => s).slice(0, 9)
-}
-
-// Busca el recibo que coincide con la factura usando múltiples estrategias
-export function encontrarReciboPorFactura(
-  factura: Factura,
-  recibos: ReciboMercancia[]
-): ReciboMercancia | undefined {
-  const digitos = ultimos4Digitos(factura.numeroFactura)
-  const nitFact = normalizarNIT(factura.nitProveedor || '')
-
-  // 1. Últimos 4 dígitos del número de factura coinciden en cualquier campo del recibo
-  // 1a. Coincidir por numeroFacturaProveedor (campo exacto desde MySQL)
-  const porNoFactura = recibos.find(r =>
-    r.numeroFacturaProveedor && r.numeroFacturaProveedor === digitos
-  )
-  if (porNoFactura) return porNoFactura
-
-  // 1b. Últimos dígitos del número de recibo
-  const porDigitos = recibos.find(r =>
-    r.numeroRecibo.replace(/\D/g, '').endsWith(digitos) ||
-    (r.xmlRaw && r.xmlRaw.includes(digitos))
-  )
-  if (porDigitos) return porDigitos
-
-  // 2. NIT normalizado (ignora dígito verificador y puntos)
-  if (nitFact.length >= 6) {
-    const porNit = recibos.find(r => {
-      const nitRec = normalizarNIT(r.nitProveedor || '')
-      return nitRec.length >= 6 && (
-        nitRec.startsWith(nitFact) ||
-        nitFact.startsWith(nitRec) ||
-        nitRec === nitFact
-      )
-    })
-    if (porNit) return porNit
-  }
-
-  // 3. Palabras clave del nombre del proveedor (al menos 1 palabra significativa en común)
-  if (factura.proveedor) {
-    const palabrasFact = factura.proveedor.toLowerCase()
-      .split(/\s+/)
-      .filter(p => p.length > 3 && !['s.a.', 'ltda', 'sas', 'comercio', 'de', 'la', 'del'].includes(p))
-
-    const porNombre = recibos.find(r => {
-      if (!r.proveedor) return false
-      const nombreRec = r.proveedor.toLowerCase()
-      return palabrasFact.some(p => nombreRec.includes(p))
-    })
-    if (porNombre) return porNombre
-  }
-
-  // 4. Un solo recibo disponible → asociarlo directamente
-  if (recibos.length === 1) return recibos[0]
-
-  return undefined
-}
-
-function normalizarTexto(texto: string): string {
+// ── Normalización ─────────────────────────────────────────────────────────────
+function normalizar(texto: string): string {
   return texto
     .toLowerCase()
-    .normalize('NFD')
-    .replace(/[̀-ͯ]/g, '')
-    .replace(/[^a-z0-9\s]/g, '')
+    .normalize('NFD').replace(/[̀-ͯ]/g, '')
+    .replace(/[^a-z0-9\s]/g, ' ')
+    .replace(/\s+/g, ' ')
     .trim()
 }
 
-function similitudTexto(a: string, b: string): number {
-  const na = normalizarTexto(a)
-  const nb = normalizarTexto(b)
-  if (na === nb) return 1
-  const wordsA = new Set(na.split(/\s+/))
-  const wordsB = new Set(nb.split(/\s+/))
-  const intersection = [...wordsA].filter(w => wordsB.has(w)).length
-  const union = new Set([...wordsA, ...wordsB]).size
-  return union === 0 ? 0 : intersection / union
+// Limpia y normaliza un código EAN/barras
+function limpiarEAN(codigo: string): string {
+  return (codigo || '').replace(/\D/g, '').trim()
 }
 
-function esMismoPresentacion(descA: string, descB: string): boolean {
-  return similitudTexto(descA, descB) >= SIMILITUD_DESCRIPCION
+// Similitud Jaccard entre palabras (ignora palabras <= 2 chars)
+function similitud(a: string, b: string): number {
+  const na = normalizar(a), nb = normalizar(b)
+  if (na === nb) return 1
+  if (na.includes(nb) || nb.includes(na)) return 0.9
+  const wa = new Set(na.split(' ').filter(w => w.length > 2))
+  const wb = new Set(nb.split(' ').filter(w => w.length > 2))
+  const inter = [...wa].filter(w => wb.has(w)).length
+  const union = new Set([...wa, ...wb]).size
+  return union === 0 ? 0 : inter / union
 }
+
+const UMBRAL_DESC = 0.55  // similitud mínima para emparejar por descripción
+
+// ── Emparejamiento EAN + Descripción ─────────────────────────────────────────
+interface Par {
+  pf: ProductoFactura
+  pr: ProductoRecibo
+  criterio: 'ean' | 'descripcion'
+  score: number
+}
+
+function emparejarProductos(
+  factura: Factura,
+  recibo: ReciboMercancia
+): { pares: Par[]; soloFactura: ProductoFactura[]; soloRecibo: ProductoRecibo[] } {
+  const usadosRecibo = new Set<number>()
+  const pares: Par[] = []
+  const soloFactura: ProductoFactura[] = []
+
+  for (const pf of factura.productos) {
+    const eanF = limpiarEAN(pf.codigo)
+    let mejor: { idx: number; par: Par } | null = null
+
+    for (let i = 0; i < recibo.productos.length; i++) {
+      if (usadosRecibo.has(i)) continue
+      const pr = recibo.productos[i]
+      const eanR = limpiarEAN(pr.codigo)
+
+      // 1. Coincidencia exacta por EAN (máxima prioridad)
+      if (eanF && eanR && eanF === eanR) {
+        mejor = { idx: i, par: { pf, pr, criterio: 'ean', score: 1 } }
+        break
+      }
+
+      // 2. EAN parcial (uno contiene al otro, e.g. EAN-8 vs EAN-13)
+      if (eanF && eanR && eanF.length >= 6 && eanR.length >= 6 &&
+        (eanF.endsWith(eanR) || eanR.endsWith(eanF) || eanF.includes(eanR) || eanR.includes(eanF))) {
+        const sc = 0.95
+        if (!mejor || sc > mejor.par.score)
+          mejor = { idx: i, par: { pf, pr, criterio: 'ean', score: sc } }
+        continue
+      }
+
+      // 3. Coincidencia por descripción
+      const sc = similitud(pf.descripcion, pr.descripcion)
+      if (sc >= UMBRAL_DESC && (!mejor || sc > mejor.par.score)) {
+        mejor = { idx: i, par: { pf, pr, criterio: 'descripcion', score: sc } }
+      }
+    }
+
+    if (mejor) {
+      pares.push(mejor.par)
+      usadosRecibo.add(mejor.idx)
+    } else {
+      soloFactura.push(pf)
+    }
+  }
+
+  const soloRecibo = recibo.productos.filter((_, i) => !usadosRecibo.has(i))
+  return { pares, soloFactura, soloRecibo }
+}
+
+// ── Tipos para la nota de ajuste ──────────────────────────────────────────────
+export interface LineaAjuste {
+  codigoEAN: string
+  descripcionFactura: string
+  descripcionRecibo: string
+  criterioMatch: 'ean' | 'descripcion' | 'no_encontrado'
+  cantFacturada: number
+  cantRecibida: number
+  difCantidad: number
+  precioFactura: number
+  precioRecibo: number
+  difPrecio: number
+  ivaFactura: number
+  ivaRecibo: number
+  difIva: number
+  iconsumoFactura: number
+  iconsumoRecibo: number
+  difIconsumo: number
+  ibuaFactura: number
+  ibuaRecibo: number
+  difIbua: number
+  icuiFactura: number
+  icuiRecibo: number
+  difIcui: number
+  descuentoFactura: number
+  descuentoRecibo: number
+  difDescuento: number
+  totalFactura: number
+  totalRecibo: number
+  diferenciaNeta: number
+  tienesDiferencia: boolean
+}
+
+export interface NotaAjustePrecio {
+  numeroFactura: string
+  numeroRecibo: string
+  proveedor: string
+  nitProveedor: string
+  fecha: string
+  lineas: LineaAjuste[]
+  totalFactura: number
+  totalRecibo: number
+  difCantidades: number
+  difPrecios: number
+  difImpuestos: number
+  difDescuentos: number
+  diferenciaNeta: number
+  generada: string
+}
+
+// ── Comparación principal ─────────────────────────────────────────────────────
+const TOLERANCIA = 0.01
 
 export function compararFacturaConRecibo(
   factura: Factura,
   recibo: ReciboMercancia
 ): ResultadoComparacion {
   const diferencias: Diferencia[] = []
+  const { pares, soloFactura, soloRecibo } = emparejarProductos(factura, recibo)
 
-  for (const pf of factura.productos) {
-    const codigoExacto = recibo.productos.find(pr => pr.codigo === pf.codigo)
+  // --- Comparar cada par emparejado ---
+  for (const { pf, pr, criterio } of pares) {
+    const cantF = pf.cantidad, cantR = pr.cantidad
+    const precioF = pf.precioUnitario, precioR = pr.precioUnitario
+    const ivaF = pf.impuesto || 0, ivaR = (pr as any).iva || 0
+    const icF = 0, icR = (pr as any).iconsumo || 0
+    const ibuaF = 0, ibuaR = (pr as any).ibua || 0
+    const icuiF = 0, icuiR = (pr as any).icui || 0
+    const descF = pf.descuento || 0, descR = (pr as any).descuento || 0
+    const totalF = pf.total, totalR = pr.subtotal
 
-    if (codigoExacto) {
-      // Mismo código — comparar cantidad y precio
-      if (codigoExacto.cantidad !== pf.cantidad) {
-        diferencias.push({
-          tipoDiferencia: 'cantidad',
-          codigoRecibo: codigoExacto.codigo,
-          codigoFactura: pf.codigo,
-          descripcion: pf.descripcion,
-          cantidadRecibida: codigoExacto.cantidad,
-          cantidadFacturada: pf.cantidad,
-          precioRecibo: codigoExacto.precioUnitario,
-          precioFactura: pf.precioUnitario,
-          valorDiferenciaUnitario: pf.precioUnitario,
-          valorDiferenciaTotal: (pf.cantidad - codigoExacto.cantidad) * pf.precioUnitario,
-          nota: `Cantidad recibida (${codigoExacto.cantidad}) difiere de cantidad facturada (${pf.cantidad}). Diferencia: ${pf.cantidad - codigoExacto.cantidad} unidades. Valor diferencia: $${Math.abs((pf.cantidad - codigoExacto.cantidad) * pf.precioUnitario).toFixed(2)}`,
-        })
-      }
+    const difNeta = totalF - totalR
 
-      const diffPrecio = Math.abs(codigoExacto.precioUnitario - pf.precioUnitario)
-      if (diffPrecio > TOLERANCIA_PRECIO) {
-        diferencias.push({
-          tipoDiferencia: 'precio',
-          codigoRecibo: codigoExacto.codigo,
-          codigoFactura: pf.codigo,
-          descripcion: pf.descripcion,
-          cantidadRecibida: codigoExacto.cantidad,
-          cantidadFacturada: pf.cantidad,
-          precioRecibo: codigoExacto.precioUnitario,
-          precioFactura: pf.precioUnitario,
-          valorDiferenciaUnitario: pf.precioUnitario - codigoExacto.precioUnitario,
-          valorDiferenciaTotal: (pf.precioUnitario - codigoExacto.precioUnitario) * pf.cantidad,
-          nota: `Precio unitario en recibo ($${codigoExacto.precioUnitario}) difiere del facturado ($${pf.precioUnitario}). Diferencia unitaria: $${(pf.precioUnitario - codigoExacto.precioUnitario).toFixed(2)}. Nuevo valor total: $${(pf.precioUnitario * pf.cantidad).toFixed(2)}`,
-        })
-      }
-    } else {
-      // Código diferente — buscar por descripción similar (presentaciones)
-      const porDescripcion = recibo.productos.find(pr =>
-        esMismoPresentacion(pr.descripcion, pf.descripcion)
-      )
-
-      if (porDescripcion) {
-        // Misma descripción, código diferente → presentación diferente
-        const diffPrecio = Math.abs(porDescripcion.precioUnitario - pf.precioUnitario)
-        const diffCantidad = porDescripcion.cantidad !== pf.cantidad
-
-        diferencias.push({
-          tipoDiferencia: 'presentacion',
-          codigoRecibo: porDescripcion.codigo,
-          codigoFactura: pf.codigo,
-          descripcion: pf.descripcion,
-          cantidadRecibida: porDescripcion.cantidad,
-          cantidadFacturada: pf.cantidad,
-          precioRecibo: porDescripcion.precioUnitario,
-          precioFactura: pf.precioUnitario,
-          valorDiferenciaUnitario: pf.precioUnitario - porDescripcion.precioUnitario,
-          valorDiferenciaTotal:
-            pf.precioUnitario * pf.cantidad - porDescripcion.precioUnitario * porDescripcion.cantidad,
-          nota: `Producto con presentación diferente. Código recibo: ${porDescripcion.codigo} / Código factura: ${pf.codigo}. Descripción coincide: "${pf.descripcion}". ${diffCantidad ? `Cantidad recibida: ${porDescripcion.cantidad}, facturada: ${pf.cantidad}. ` : ''}${diffPrecio > TOLERANCIA_PRECIO ? `Precio recibo: $${porDescripcion.precioUnitario}, facturado: $${pf.precioUnitario}. ` : ''}Nuevo valor total facturado: $${(pf.precioUnitario * pf.cantidad).toFixed(2)}`,
-        })
-      } else {
-        // Producto no encontrado en el recibo
-        diferencias.push({
-          tipoDiferencia: 'producto_no_encontrado',
-          codigoRecibo: '',
-          codigoFactura: pf.codigo,
-          descripcion: pf.descripcion,
-          cantidadFacturada: pf.cantidad,
-          precioFactura: pf.precioUnitario,
-          valorDiferenciaTotal: pf.total,
-          nota: `Producto "${pf.descripcion}" (código: ${pf.codigo}) facturado por $${pf.total.toFixed(2)} NO se encontró en el recibo de mercancía.`,
-        })
-      }
-    }
-  }
-
-  // Productos en recibo que no están en factura
-  for (const pr of recibo.productos) {
-    const enFactura =
-      factura.productos.find(pf => pf.codigo === pr.codigo) ||
-      factura.productos.find(pf => esMismoPresentacion(pf.descripcion, pr.descripcion))
-    if (!enFactura) {
+    // 1. Diferencia de cantidad
+    if (Math.abs(cantF - cantR) > TOLERANCIA) {
       diferencias.push({
-        tipoDiferencia: 'producto_no_encontrado',
-        codigoRecibo: pr.codigo,
-        codigoFactura: '',
-        descripcion: pr.descripcion,
-        cantidadRecibida: pr.cantidad,
-        precioRecibo: pr.precioUnitario,
-        valorDiferenciaTotal: pr.subtotal,
-        nota: `Producto "${pr.descripcion}" (código: ${pr.codigo}) recibido por $${pr.subtotal.toFixed(2)} NO aparece en la factura.`,
+        tipoDiferencia: 'cantidad',
+        codigoFactura: pf.codigo, codigoRecibo: pr.codigo,
+        descripcion: pf.descripcion,
+        cantidadFacturada: cantF, cantidadRecibida: cantR,
+        precioFactura: precioF, precioRecibo: precioR,
+        valorDiferenciaUnitario: precioF,
+        valorDiferenciaTotal: (cantF - cantR) * precioF,
+        nota: `${criterio === 'ean' ? '🔢 EAN' : '📝 Descripción'}: Cantidad facturada ${cantF} ≠ recibida ${cantR}. Diferencia: ${cantF - cantR} uds × $${precioF.toLocaleString('es-CO')} = $${((cantF - cantR) * precioF).toLocaleString('es-CO')}`,
+      })
+    }
+
+    // 2. Diferencia de precio unitario
+    if (Math.abs(precioF - precioR) > TOLERANCIA) {
+      diferencias.push({
+        tipoDiferencia: 'precio',
+        codigoFactura: pf.codigo, codigoRecibo: pr.codigo,
+        descripcion: pf.descripcion,
+        cantidadFacturada: cantF, cantidadRecibida: cantR,
+        precioFactura: precioF, precioRecibo: precioR,
+        valorDiferenciaUnitario: precioF - precioR,
+        valorDiferenciaTotal: (precioF - precioR) * cantF,
+        nota: `Precio unitario factura $${precioF.toLocaleString('es-CO')} ≠ recibo $${precioR.toLocaleString('es-CO')}. Diferencia: $${(precioF - precioR).toLocaleString('es-CO')} × ${cantF} uds = $${((precioF - precioR) * cantF).toLocaleString('es-CO')}`,
+      })
+    }
+
+    // 3. Diferencia IVA
+    if (Math.abs(ivaF - ivaR) > TOLERANCIA && (ivaF > 0 || ivaR > 0)) {
+      diferencias.push({
+        tipoDiferencia: 'precio',
+        codigoFactura: pf.codigo, codigoRecibo: pr.codigo,
+        descripcion: `IVA — ${pf.descripcion}`,
+        precioFactura: ivaF, precioRecibo: ivaR,
+        valorDiferenciaTotal: ivaF - ivaR,
+        nota: `IVA facturado $${ivaF.toLocaleString('es-CO')} ≠ IVA recibo $${ivaR.toLocaleString('es-CO')}. Diferencia: $${(ivaF - ivaR).toLocaleString('es-CO')}`,
+      })
+    }
+
+    // 4. Diferencia Impoconsumo
+    if (Math.abs(icF - icR) > TOLERANCIA && icR > 0) {
+      diferencias.push({
+        tipoDiferencia: 'precio',
+        codigoFactura: pf.codigo, codigoRecibo: pr.codigo,
+        descripcion: `Impoconsumo — ${pf.descripcion}`,
+        precioFactura: icF, precioRecibo: icR,
+        valorDiferenciaTotal: icF - icR,
+        nota: `Impoconsumo factura $${icF.toLocaleString('es-CO')} ≠ recibo $${icR.toLocaleString('es-CO')}`,
+      })
+    }
+
+    // 5. Diferencia IBUA
+    if (Math.abs(ibuaF - ibuaR) > TOLERANCIA && ibuaR > 0) {
+      diferencias.push({
+        tipoDiferencia: 'precio',
+        codigoFactura: pf.codigo, codigoRecibo: pr.codigo,
+        descripcion: `IBUA — ${pf.descripcion}`,
+        precioFactura: ibuaF, precioRecibo: ibuaR,
+        valorDiferenciaTotal: ibuaF - ibuaR,
+        nota: `IBUA factura $${ibuaF.toLocaleString('es-CO')} ≠ recibo $${ibuaR.toLocaleString('es-CO')}`,
+      })
+    }
+
+    // 6. Diferencia ICUI
+    if (Math.abs(icuiF - icuiR) > TOLERANCIA && icuiR > 0) {
+      diferencias.push({
+        tipoDiferencia: 'precio',
+        codigoFactura: pf.codigo, codigoRecibo: pr.codigo,
+        descripcion: `ICUI — ${pf.descripcion}`,
+        precioFactura: icuiF, precioRecibo: icuiR,
+        valorDiferenciaTotal: icuiF - icuiR,
+        nota: `ICUI factura $${icuiF.toLocaleString('es-CO')} ≠ recibo $${icuiR.toLocaleString('es-CO')}`,
+      })
+    }
+
+    // 7. Diferencia descuentos
+    if (Math.abs(descF - descR) > TOLERANCIA && (descF > 0 || descR > 0)) {
+      diferencias.push({
+        tipoDiferencia: 'precio',
+        codigoFactura: pf.codigo, codigoRecibo: pr.codigo,
+        descripcion: `Descuento — ${pf.descripcion}`,
+        precioFactura: descF, precioRecibo: descR,
+        valorDiferenciaTotal: descF - descR,
+        nota: `Descuento factura $${descF.toLocaleString('es-CO')} ≠ recibo $${descR.toLocaleString('es-CO')}`,
+      })
+    }
+
+    // 8. Diferencia de presentación (emparejó por descripción, códigos distintos)
+    if (criterio === 'descripcion' && pf.codigo && pr.codigo && limpiarEAN(pf.codigo) !== limpiarEAN(pr.codigo)) {
+      diferencias.push({
+        tipoDiferencia: 'presentacion',
+        codigoFactura: pf.codigo, codigoRecibo: pr.codigo,
+        descripcion: pf.descripcion,
+        cantidadFacturada: cantF, cantidadRecibida: cantR,
+        precioFactura: precioF, precioRecibo: precioR,
+        valorDiferenciaTotal: difNeta,
+        nota: `Producto emparejado por descripción con códigos distintos. EAN factura: ${pf.codigo} / EAN recibo: ${pr.codigo}. Verificar presentación (granel vs empaque). Valor neto: $${totalF.toLocaleString('es-CO')} vs $${totalR.toLocaleString('es-CO')}`,
       })
     }
   }
 
+  // --- Productos en factura sin par en recibo ---
+  for (const pf of soloFactura) {
+    diferencias.push({
+      tipoDiferencia: 'producto_no_encontrado',
+      codigoFactura: pf.codigo, codigoRecibo: '',
+      descripcion: pf.descripcion,
+      cantidadFacturada: pf.cantidad,
+      precioFactura: pf.precioUnitario,
+      valorDiferenciaTotal: pf.total,
+      nota: `Producto en FACTURA no encontrado en recibo. Código: ${pf.codigo || '—'} | Cant: ${pf.cantidad} | Total: $${pf.total.toLocaleString('es-CO')}`,
+    })
+  }
+
+  // --- Productos en recibo sin par en factura ---
+  for (const pr of soloRecibo) {
+    diferencias.push({
+      tipoDiferencia: 'producto_no_encontrado',
+      codigoFactura: '', codigoRecibo: pr.codigo,
+      descripcion: pr.descripcion,
+      cantidadRecibida: pr.cantidad,
+      precioRecibo: pr.precioUnitario,
+      valorDiferenciaTotal: -pr.subtotal,
+      nota: `Producto en RECIBO no encontrado en factura. Código: ${pr.codigo || '—'} | Cant: ${pr.cantidad} | Total: $${pr.subtotal.toLocaleString('es-CO')}`,
+    })
+  }
+
   const valorDiferenciaTotal = factura.total - recibo.total
+
+  // --- Generar Nota de Ajuste si hay diferencia de totales ---
+  let notaAjuste: NotaAjustePrecio | null = null
+  if (Math.abs(valorDiferenciaTotal) > TOLERANCIA) {
+    const lineas: LineaAjuste[] = pares.map(({ pf, pr, criterio }) => {
+      const pr_ = pr as any
+      const totalF = pf.total
+      const totalR = pr.subtotal
+      return {
+        codigoEAN: limpiarEAN(pf.codigo) || limpiarEAN(pr.codigo),
+        descripcionFactura: pf.descripcion,
+        descripcionRecibo: pr.descripcion,
+        criterioMatch: criterio,
+        cantFacturada: pf.cantidad, cantRecibida: pr.cantidad, difCantidad: pf.cantidad - pr.cantidad,
+        precioFactura: pf.precioUnitario, precioRecibo: pr.precioUnitario, difPrecio: pf.precioUnitario - pr.precioUnitario,
+        ivaFactura: pf.impuesto || 0, ivaRecibo: pr_.iva || 0, difIva: (pf.impuesto || 0) - (pr_.iva || 0),
+        iconsumoFactura: 0, iconsumoRecibo: pr_.iconsumo || 0, difIconsumo: -(pr_.iconsumo || 0),
+        ibuaFactura: 0, ibuaRecibo: pr_.ibua || 0, difIbua: -(pr_.ibua || 0),
+        icuiFactura: 0, icuiRecibo: pr_.icui || 0, difIcui: -(pr_.icui || 0),
+        descuentoFactura: pf.descuento || 0, descuentoRecibo: pr_.descuento || 0, difDescuento: (pf.descuento || 0) - (pr_.descuento || 0),
+        totalFactura: totalF, totalRecibo: totalR,
+        diferenciaNeta: totalF - totalR,
+        tienesDiferencia: Math.abs(totalF - totalR) > TOLERANCIA,
+      }
+    })
+
+    // Agregar los sin par
+    soloFactura.forEach(pf => lineas.push({
+      codigoEAN: limpiarEAN(pf.codigo), descripcionFactura: pf.descripcion, descripcionRecibo: '—', criterioMatch: 'no_encontrado',
+      cantFacturada: pf.cantidad, cantRecibida: 0, difCantidad: pf.cantidad,
+      precioFactura: pf.precioUnitario, precioRecibo: 0, difPrecio: pf.precioUnitario,
+      ivaFactura: pf.impuesto || 0, ivaRecibo: 0, difIva: pf.impuesto || 0,
+      iconsumoFactura: 0, iconsumoRecibo: 0, difIconsumo: 0,
+      ibuaFactura: 0, ibuaRecibo: 0, difIbua: 0,
+      icuiFactura: 0, icuiRecibo: 0, difIcui: 0,
+      descuentoFactura: pf.descuento || 0, descuentoRecibo: 0, difDescuento: pf.descuento || 0,
+      totalFactura: pf.total, totalRecibo: 0, diferenciaNeta: pf.total, tienesDiferencia: true,
+    }))
+
+    soloRecibo.forEach(pr => {
+      const pr_ = pr as any
+      lineas.push({
+        codigoEAN: limpiarEAN(pr.codigo), descripcionFactura: '—', descripcionRecibo: pr.descripcion, criterioMatch: 'no_encontrado',
+        cantFacturada: 0, cantRecibida: pr.cantidad, difCantidad: -pr.cantidad,
+        precioFactura: 0, precioRecibo: pr.precioUnitario, difPrecio: -pr.precioUnitario,
+        ivaFactura: 0, ivaRecibo: pr_.iva || 0, difIva: -(pr_.iva || 0),
+        iconsumoFactura: 0, iconsumoRecibo: pr_.iconsumo || 0, difIconsumo: -(pr_.iconsumo || 0),
+        ibuaFactura: 0, ibuaRecibo: pr_.ibua || 0, difIbua: -(pr_.ibua || 0),
+        icuiFactura: 0, icuiRecibo: pr_.icui || 0, difIcui: -(pr_.icui || 0),
+        descuentoFactura: 0, descuentoRecibo: pr_.descuento || 0, difDescuento: -(pr_.descuento || 0),
+        totalFactura: 0, totalRecibo: pr.subtotal, diferenciaNeta: -pr.subtotal, tienesDiferencia: true,
+      })
+    })
+
+    const lineasConDif = lineas.filter(l => l.tienesDiferencia)
+    notaAjuste = {
+      numeroFactura: factura.numeroFactura,
+      numeroRecibo: recibo.numeroRecibo,
+      proveedor: factura.proveedor || recibo.proveedor,
+      nitProveedor: factura.nitProveedor || recibo.nitProveedor,
+      fecha: new Date().toISOString().slice(0, 10),
+      lineas: lineasConDif,
+      totalFactura: factura.total,
+      totalRecibo: recibo.total,
+      difCantidades: lineasConDif.reduce((s, l) => s + (l.difCantidad * l.precioFactura), 0),
+      difPrecios:    lineasConDif.reduce((s, l) => s + (l.difPrecio * l.cantFacturada), 0),
+      difImpuestos:  lineasConDif.reduce((s, l) => s + l.difIva + l.difIconsumo + l.difIbua + l.difIcui, 0),
+      difDescuentos: lineasConDif.reduce((s, l) => s + l.difDescuento, 0),
+      diferenciaNeta: valorDiferenciaTotal,
+      generada: new Date().toISOString(),
+    }
+  }
 
   return {
     id: `${factura.id}-${recibo.id}-${Date.now()}`,
@@ -212,5 +377,58 @@ export function compararFacturaConRecibo(
     valorTotalRecibo: recibo.total,
     valorDiferenciaTotal,
     estado: diferencias.length === 0 ? 'ok' : 'con_diferencias',
+    notaAjuste,
+  } as ResultadoComparacion & { notaAjuste: NotaAjustePrecio | null }
+}
+
+// ── Utilidades exportadas ─────────────────────────────────────────────────────
+export function ultimos4Digitos(numeroFactura: string): string {
+  return (numeroFactura || '').replace(/\D/g, '').slice(-4)
+}
+
+function normalizarNIT(nit: string): string {
+  return (nit || '').replace(/[.\-\s]/g, '').slice(0, 9)
+}
+
+export function encontrarReciboPorFactura(
+  factura: Factura,
+  recibos: ReciboMercancia[]
+): ReciboMercancia | undefined {
+  const digitos = ultimos4Digitos(factura.numeroFactura)
+  const nitFact = normalizarNIT(factura.nitProveedor || '')
+
+  // 1. Coincidencia exacta por numeroFacturaProveedor del recibo
+  const porNoFact = recibos.find(r =>
+    r.numeroFacturaProveedor && r.numeroFacturaProveedor === digitos
+  )
+  if (porNoFact) return porNoFact
+
+  // 2. Últimos dígitos en el número de recibo
+  const porDigitos = recibos.find(r =>
+    r.numeroRecibo.replace(/\D/g, '').endsWith(digitos)
+  )
+  if (porDigitos) return porDigitos
+
+  // 3. NIT normalizado
+  if (nitFact.length >= 6) {
+    const porNit = recibos.find(r => {
+      const nitRec = normalizarNIT(r.nitProveedor || '')
+      return nitRec.length >= 6 && (nitRec.startsWith(nitFact) || nitFact.startsWith(nitRec))
+    })
+    if (porNit) return porNit
   }
+
+  // 4. Palabras clave del proveedor
+  if (factura.proveedor) {
+    const palabras = factura.proveedor.toLowerCase().split(/\s+/).filter(p => p.length > 3)
+    const porNombre = recibos.find(r =>
+      r.proveedor && palabras.some(p => r.proveedor.toLowerCase().includes(p))
+    )
+    if (porNombre) return porNombre
+  }
+
+  // 5. Un único recibo disponible
+  if (recibos.length === 1) return recibos[0]
+
+  return undefined
 }
