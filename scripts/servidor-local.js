@@ -70,40 +70,84 @@ async function importarRecibos(fechaInicio, fechaFin) {
     if (!mapa.has(num)) {
       mapa.set(num, {
         id: `r-bd-${num}-${Date.now()}-${Math.random().toString(36).slice(2, 5)}`,
-        numeroRecibo: num,
-        proveedor: String(f.Emp_Razon || '').trim(),
-        nitProveedor: String(f.Ent_Nit || '').trim(),
-        fecha: f.Ent_Fecha instanceof Date ? f.Ent_Fecha.toISOString().slice(0, 10) : String(f.Ent_Fecha || '').slice(0, 10),
+        numeroRecibo:          num,
+        proveedor:             String(f.Emp_Razon       || '').trim(),
+        nitProveedor:          String(f.Ent_Nit         || '').trim(),
+        fecha:                 f.Ent_Fecha instanceof Date
+                                 ? f.Ent_Fecha.toISOString().slice(0, 10)
+                                 : String(f.Ent_Fecha   || '').slice(0, 10),
         numeroFacturaProveedor: noFactura,
+        tipoFactura:           String(f.Ent_TipoFactura || '').trim(),
+        noCompra:              String(f.Ent_NoCompra    || '').trim(),
+        comentario:            String(f.Ent_Comentario  || '').trim(),
+        entTipo:               String(f.Ent_Tipo        || '').trim(),
+        // Totales del encabezado (Ent_*)
+        entNeto:               Number(f.Ent_Neto        || 0),   // total a pagar
+        entBruto:              Number(f.Ent_Bruto       || 0),
+        entDescuentos:         Number(f.Ent_Descuentos  || 0),
+        entIva:                Number(f.Ent_Iva         || 0),
+        entIconsumo:           Number(f.Ent_IConsumo    || 0),
+        entEstampillas:        Number(f.Ent_Estampillas || 0),
+        entVrFactura:          Number(f.Ent_VrFactura   || 0),
         productos: [], total: 0,
         creadoEn: new Date().toISOString(),
       })
     }
     const r = mapa.get(num)
-    const cantidad    = Number(f.EntDet_CanRec    || 0)
-    const costoBruto  = Number(f.EntDet_CostoBruto|| 0)
-    const costoNeto   = Number(f.EntDet_CostoNeto || 0)
-    const descuento   = Number(f.EntDet_Descue01||0) + Number(f.EntDet_Descue02||0) + Number(f.EntDet_Descue03||0)
-    const totalBruto  = cantidad * costoBruto
-    const totalNeto   = Number(f.EntDet_TotalNeto || cantidad * costoNeto)
-    const baseIva     = totalBruto - descuento
-    const ivaDB       = Number(f.EntDet_Iva || 0)
-    const tasaIvaDB   = baseIva > 0 && ivaDB > 0 ? (ivaDB / baseIva) * 100 : 0
-    const tasaIva     = tasaIvaDB > 15 ? 19 : tasaIvaDB > 3 ? 5 : 0
-    const ivaCalc     = baseIva * (tasaIva / 100)
+    // ── Mapeo correcto de campos MySQL → ProductoRecibo ──────────────────────
+    const cantPedida  = Number(f.EntDet_CanPed       || 0)  // cant. pedida
+    const cantidad    = Number(f.EntDet_CanRec        || 0)  // cant. RECIBIDA
+    const cantAdi     = Number(f.EntDet_CanAdi        || 0)  // adicional
+    const precioLista = Number(f.EntDet_Costo         || 0)  // precio lista
+    const costoBruto  = Number(f.EntDet_CostoBruto    || 0)  // precio bruto unitario
+    const costoNeto   = Number(f.EntDet_CostoNeto     || 0)  // precio neto unitario (después de descuentos)
+    const descPct1    = Number(f.EntDet_Descue01      || 0)  // % descuento 1
+    const descPct2    = Number(f.EntDet_Descue02      || 0)  // % descuento 2
+    const descPct3    = Number(f.EntDet_Descue03      || 0)  // % descuento 3
+    const totalBruto  = Number(f.EntDet_TotalBruto    || cantidad * costoBruto)
+    const totalNeto   = Number(f.EntDet_TotalNeto     || cantidad * costoNeto)
+    // Descuento real = diferencia entre bruto y neto
+    const descuento   = Math.max(0, totalBruto - totalNeto)
+
+    // TASAS (%) de impuestos
+    const tasaIva     = Number(f.EntDet_Iva           || 0)  // tasa IVA %
+    const tasaIcui    = Number(f.EntDet_ICUI          || 0)  // tasa ICUI %
+    const tasaIbua    = Number(f.EntDet_IBUA          || 0)  // tasa IBUA %
+    const tasaIconsumo= Number(f.EntDet_IConsumo      || 0)  // tasa Impoconsumo %
+
+    // VALORES reales de impuestos (TotalVr* son los valores monetarios de la línea)
+    const ivaValor    = Number(f.TotalVrIva           || 0)  // valor IVA de la línea
+    const icuiValor   = Number(f.TotalVrICUI          || 0)  // valor ICUI de la línea
+    const ibuaValor   = Number(f.TotalVrIBUA          || 0)  // valor IBUA de la línea
+    // Impoconsumo: calcular si no hay campo específico de valor
+    const iconsumoValor = Number(f.EntDet_IConsumo > 1 ? 0 : f.EntDet_IConsumo || 0)
+    const estampillas = Number(f.EntDet_Estampillas   || 0)
+    const otros       = Number(f.EntDet_Otros         || 0)
 
     if (String(f.EntDet_Barra||'').trim() || String(f.EntDet_Articulo||'').trim()) {
       r.productos.push({
-        codigo: String(f.EntDet_Barra || '').trim(),
-        descripcion: String(f.EntDet_Articulo || '').trim(),
-        cantidad, costoBruto, totalBruto, precioUnitario: costoNeto,
-        descuento, baseIva, subtotal: totalNeto,
-        iva: ivaCalc, tasaIva,
-        iconsumo: Number(f.EntDet_IConsumo||0),
-        ibua: Number(f.EntDet_IBUA||0),
-        icui: Number(f.EntDet_ICUI||0),
-        estampillas: Number(f.EntDet_Estampillas||0),
-        otros: Number(f.EntDet_Otros||0),
+        codigo:          String(f.EntDet_Barra    || '').trim(),
+        descripcion:     String(f.EntDet_Articulo || '').trim(),
+        cantidadPedida:  cantPedida,
+        cantidad,                          // EntDet_CanRec
+        cantidadAdicional: cantAdi,
+        precioLista,                       // EntDet_Costo
+        costoBruto,                        // EntDet_CostoBruto
+        precioUnitario:  costoNeto,        // EntDet_CostoNeto ← usado para comparación
+        descPct1, descPct2, descPct3,
+        descuento,                         // valor calculado
+        tasaIva,                           // EntDet_Iva (tasa %)
+        iva:             ivaValor,         // TotalVrIva (valor real)
+        tasaIconsumo,
+        iconsumo:        iconsumoValor,
+        tasaIbua,
+        ibua:            ibuaValor,        // TotalVrIBUA
+        tasaIcui,
+        icui:            icuiValor,        // TotalVrICUI
+        estampillas,
+        otros,
+        totalBruto,                        // EntDet_TotalBruto
+        subtotal:        totalNeto,        // EntDet_TotalNeto ← total neto sin impuestos
       })
       r.total += totalNeto
     }
@@ -122,7 +166,9 @@ async function importarRecibos(fechaInicio, fechaFin) {
       estampillas:  p.reduce((s, x) => s + (x.estampillas||0), 0),
       neto:         r.total,
     }
-    if (r.total === 0) r.total = r.totales.subtotalNeto
+    // Ent_Neto = total real a pagar (suma de todo: neto + IVA + impoconsumo + IBUA + ICUI)
+    if (r.entNeto > 0) r.total = r.entNeto
+    else if (r.total === 0) r.total = r.totales.subtotalNeto + r.totales.iva + r.totales.iconsumo + r.totales.ibua + r.totales.icui
   }
 
   let nuevos = 0, actualizados = 0, errores = 0

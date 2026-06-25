@@ -1,18 +1,28 @@
 export interface ProductoRecibo {
-  codigo: string
-  descripcion: string
-  cantidad: number
-  precioUnitario: number   // costo neto unitario
-  costoBruto?: number      // costo antes de descuentos
-  descuento?: number       // descuento total (desc1+desc2+desc3)
-  subtotal: number         // total neto línea
-  iva?: number             // valor IVA
-  tasaIva?: number         // tasa IVA (5 o 19)
-  iconsumo?: number        // impoconsumo
-  ibua?: number            // IBUA
-  icui?: number            // ICUI
-  estampillas?: number     // estampillas
-  otros?: number           // otros impuestos
+  codigo: string           // EntDet_Barra
+  descripcion: string      // EntDet_Articulo
+  cantidadPedida?: number  // EntDet_CanPed
+  cantidad: number         // EntDet_CanRec (cantidad RECIBIDA)
+  cantidadAdicional?: number // EntDet_CanAdi
+  precioLista?: number     // EntDet_Costo (precio lista antes de descuentos)
+  costoBruto?: number      // EntDet_CostoBruto (precio unitario bruto)
+  precioUnitario: number   // EntDet_CostoNeto (precio neto unitario)
+  descPct1?: number        // EntDet_Descue01 (% descuento 1)
+  descPct2?: number        // EntDet_Descue02 (% descuento 2)
+  descPct3?: number        // EntDet_Descue03 (% descuento 3)
+  descuento?: number       // descuento calculado total
+  tasaIva?: number         // EntDet_Iva (tasa % IVA: 0, 5, 19)
+  iva?: number             // TotalVrIva (valor IVA de la línea)
+  tasaIconsumo?: number    // EntDet_IConsumo tasa
+  iconsumo?: number        // valor impoconsumo de la línea
+  tasaIbua?: number        // EntDet_IBUA tasa
+  ibua?: number            // TotalVrIBUA (valor IBUA)
+  tasaIcui?: number        // EntDet_ICUI tasa
+  icui?: number            // TotalVrICUI (valor ICUI)
+  estampillas?: number     // EntDet_Estampillas
+  otros?: number           // EntDet_Otros
+  totalBruto?: number      // EntDet_TotalBruto (Cant × CostoBruto)
+  subtotal: number         // EntDet_TotalNeto (total neto sin impuestos)
 }
 
 export interface TotalesRecibo {
