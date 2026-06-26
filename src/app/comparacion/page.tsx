@@ -134,23 +134,20 @@ function PanelDiferencias({ resultado, factura, recibo, onClose, onEliminar }: {
             icuiFact     += (p as any).icui     || 0
           }
 
-          // Impuestos del RECIBO — desde totales (header Ent_*) o sumando líneas
+          // Impuestos del RECIBO — sumar siempre desde los productos (más confiable)
+          const prods = recibo?.productos ?? []
+          const sumaIvaRec      = Math.round(prods.reduce((s: number, p: any) => s + (Number(p.iva)      || 0), 0))
+          const sumaIconsumoRec = Math.round(prods.reduce((s: number, p: any) => s + (Number(p.iconsumo) || 0), 0))
+          const sumaIbuaRec     = Math.round(prods.reduce((s: number, p: any) => s + (Number(p.ibua)     || 0), 0))
+          const sumaIcuiRec     = Math.round(prods.reduce((s: number, p: any) => s + (Number(p.icui)     || 0), 0))
+          // Si la suma da 0 pero hay totales en el header, usar esos
           const t = recibo?.totales
-          const ivaRec = t?.iva != null
-            ? Math.round(t.iva)
-            : Math.round((recibo?.productos ?? []).reduce((s: number, p: any) => s + (p.iva || 0), 0))
-          const iconsumoRec = t?.iconsumo != null
-            ? Math.round(t.iconsumo)
-            : Math.round((recibo?.productos ?? []).reduce((s: number, p: any) => s + (p.iconsumo || 0), 0))
-          const ibuaRec = t?.ibua != null
-            ? Math.round(t.ibua)
-            : Math.round((recibo?.productos ?? []).reduce((s: number, p: any) => s + (p.ibua || 0), 0))
-          const icuiRec = t?.icui != null
-            ? Math.round(t.icui)
-            : Math.round((recibo?.productos ?? []).reduce((s: number, p: any) => s + (p.icui || 0), 0))
-          const totalReciboReal = t?.neto != null
-            ? Math.round(t.neto)
-            : Math.round(Number(resultado.valorTotalRecibo))
+          const ivaRec      = sumaIvaRec      > 0 ? sumaIvaRec      : Math.round(t?.iva      ?? 0)
+          const iconsumoRec = sumaIconsumoRec > 0 ? sumaIconsumoRec : Math.round(t?.iconsumo ?? 0)
+          const ibuaRec     = sumaIbuaRec     > 0 ? sumaIbuaRec     : Math.round(t?.ibua     ?? 0)
+          const icuiRec     = sumaIcuiRec     > 0 ? sumaIcuiRec     : Math.round(t?.icui     ?? 0)
+          const totalReciboReal = Math.round(t?.neto ?? Number(resultado.valorTotalRecibo))
+          const necesitaReimportar = ivaRec === 0 && prods.length > 0
           const totalIvaFact  = Math.round(impFact5 + impFact19)
           const totalIvaRec   = ivaRec
           const difIva        = totalIvaFact - totalIvaRec
@@ -181,7 +178,9 @@ function PanelDiferencias({ resultado, factura, recibo, onClose, onEliminar }: {
             <div className="bg-white rounded-lg border overflow-hidden">
               <div className="px-5 py-3 bg-indigo-50 border-b border-indigo-100 flex items-center justify-between">
                 <h3 className="font-semibold text-indigo-800 text-sm">Cuadro Comparativo de Impuestos — Factura vs Recibo</h3>
-                <span className="text-xs text-indigo-500">Para corrección de cuentas contables</span>
+                {necesitaReimportar
+                  ? <span className="text-xs text-orange-600 font-semibold bg-orange-100 px-2 py-1 rounded">⚠️ Recibo sin detalle IVA — reimportar desde Recibos</span>
+                  : <span className="text-xs text-indigo-500">Para corrección de cuentas contables</span>}
               </div>
               <table className="w-full text-xs">
                 <thead className="bg-indigo-700 text-white">
