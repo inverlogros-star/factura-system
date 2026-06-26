@@ -25,7 +25,16 @@ export default function DetalleFactura({ factura, onClose }: { factura: Factura;
 
     const productosHTML = factura.productos.length === 0
       ? `<tr><td colspan="9" style="text-align:center;padding:20px;color:#888">Sin líneas de detalle</td></tr>`
-      : factura.productos.map((p, i) => `
+      : factura.productos.map((p, i) => {
+        // Calcular tasa IVA usando ivaValor (IVA puro, sin otros impuestos)
+        const ivaV = (p as any).ivaValor ?? p.impuesto
+        let tasa = (p as any).tasaIva ?? 0
+        if (tasa === 0 && ivaV > 0 && p.subtotal > 0) {
+          const c = Math.round((ivaV / p.subtotal) * 100)
+          if (c >= 4 && c <= 6)       tasa = 5
+          else if (c >= 17 && c <= 21) tasa = 19
+        }
+        return `
         <tr style="background:${i % 2 === 0 ? '#fff' : '#f8fafc'}">
           <td style="padding:6px 8px;font-family:monospace;font-size:11px">${p.codigo || '—'}</td>
           <td style="padding:6px 8px;font-size:12px">${p.descripcion}</td>
@@ -33,10 +42,11 @@ export default function DetalleFactura({ factura, onClose }: { factura: Factura;
           <td style="padding:6px 8px;text-align:right">$${fmt(p.precioUnitario)}</td>
           <td style="padding:6px 8px;text-align:right;color:#c05000">${p.descuento > 0 ? `-$${fmt(p.descuento)}` : '—'}</td>
           <td style="padding:6px 8px;text-align:right">$${fmt(p.subtotal)}</td>
-          <td style="padding:6px 8px;text-align:right;color:#6d28d9">${(p as any).tasaIva !== undefined ? `${(p as any).tasaIva}%` : '—'}</td>
-          <td style="padding:6px 8px;text-align:right;color:#6d28d9">$${fmt(p.impuesto)}</td>
+          <td style="padding:6px 8px;text-align:right;color:#6d28d9;font-weight:bold">${tasa > 0 ? tasa+'%' : '0%'}</td>
+          <td style="padding:6px 8px;text-align:right;color:#6d28d9">$${fmt(ivaV)}</td>
           <td style="padding:6px 8px;text-align:right;font-weight:bold;color:#1e40af">$${fmt(p.total)}</td>
-        </tr>`).join('')
+        </tr>`
+      }).join('')
 
     ventana.document.write(`<!DOCTYPE html>
 <html lang="es">
@@ -227,16 +237,19 @@ export default function DetalleFactura({ factura, onClose }: { factura: Factura;
                     <td className="px-4 py-2.5 text-right whitespace-nowrap font-bold text-purple-700">
                       {(() => {
                         let tasa = (p as any).tasaIva ?? 0
-                        // Si la tasa viene 0 pero hay IVA, calcularla
-                        if (tasa === 0 && p.impuesto > 0 && p.subtotal > 0) {
-                          const c = Math.round((p.impuesto / p.subtotal) * 100)
-                          if (c >= 4 && c <= 6) tasa = 5
+                        // Usar ivaValor (IVA puro) para calcular la tasa — NO impuesto que incluye otros tributos
+                        const ivaP = (p as any).ivaValor ?? p.impuesto
+                        if (tasa === 0 && ivaP > 0 && p.subtotal > 0) {
+                          const c = Math.round((ivaP / p.subtotal) * 100)
+                          if (c >= 4 && c <= 6)       tasa = 5
                           else if (c >= 17 && c <= 21) tasa = 19
                         }
                         return tasa > 0 ? `${tasa}%` : '0%'
                       })()}
                     </td>
-                    <td className="px-4 py-2.5 text-right whitespace-nowrap text-purple-600">${fmt(p.impuesto)}</td>
+                    <td className="px-4 py-2.5 text-right whitespace-nowrap text-purple-600">
+                      ${fmt((p as any).ivaValor ?? p.impuesto)}
+                    </td>
                     <td className="px-4 py-2.5 text-right font-bold text-blue-700 whitespace-nowrap">${fmt(p.total)}</td>
                   </tr>
                 ))}
@@ -259,15 +272,16 @@ export default function DetalleFactura({ factura, onClose }: { factura: Factura;
           const grupos: Record<number, { base: number; iva: number }> = {}
           for (const p of factura.productos) {
             let tasa = (p as any).tasaIva ?? 0
-            // Calcular tasa si es 0 pero hay IVA
-            if (tasa === 0 && p.impuesto > 0 && p.subtotal > 0) {
-              const c = Math.round((p.impuesto / p.subtotal) * 100)
-              if (c >= 4 && c <= 6) tasa = 5
+            const ivaP = (p as any).ivaValor ?? p.impuesto
+            // Usar ivaValor (IVA puro) para calcular la tasa
+            if (tasa === 0 && ivaP > 0 && p.subtotal > 0) {
+              const c = Math.round((ivaP / p.subtotal) * 100)
+              if (c >= 4 && c <= 6)       tasa = 5
               else if (c >= 17 && c <= 21) tasa = 19
             }
             if (!grupos[tasa]) grupos[tasa] = { base: 0, iva: 0 }
             grupos[tasa].base += p.subtotal
-            grupos[tasa].iva  += p.impuesto
+            grupos[tasa].iva  += ivaP  // usar ivaValor, no impuesto total
           }
           const tasas = Object.entries(grupos).sort(([a], [b]) => Number(a) - Number(b))
           if (tasas.length === 0) return null

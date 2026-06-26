@@ -234,6 +234,13 @@ function extraerLineas(root: any): ProductoFactura[] {
       otrosImp += n(get(wt, 'TaxAmount', 'cbc:TaxAmount'))
     }
 
+    // Si tasaIva sigue en 0 pero hay IVA puro, calcular desde IVA puro (no otrosImp)
+    if (tasaIva === 0 && impuesto > 0 && subtotal > 0) {
+      const c = Math.round((impuesto / subtotal) * 100)
+      if (c >= 4 && c <= 6)       tasaIva = 5
+      else if (c >= 17 && c <= 21) tasaIva = 19
+    }
+
     const total = subtotal + impuesto + otrosImp
 
     return {
@@ -243,7 +250,8 @@ function extraerLineas(root: any): ProductoFactura[] {
       precioUnitario: precioUnitario || (cantidad > 0 ? subtotal / cantidad : 0),
       descuento,
       subtotal,
-      impuesto: impuesto + otrosImp,
+      ivaValor: impuesto,           // IVA puro (sin impoconsumo ni otros)
+      impuesto: impuesto + otrosImp, // Total impuestos
       total,
       tasaIva,
     } as ProductoFactura & { tasaIva?: number }

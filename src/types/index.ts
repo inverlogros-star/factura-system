@@ -58,7 +58,8 @@ export interface ProductoFactura {
   precioUnitario: number
   descuento: number
   subtotal: number
-  impuesto: number
+  impuesto: number    // IVA + impoconsumo + otros (total impuestos)
+  ivaValor?: number   // Solo el valor del IVA (para calcular la tasa correctamente)
   total: number
   tasaIva?: number
 }
