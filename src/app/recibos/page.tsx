@@ -42,6 +42,7 @@ export default function RecibosPage() {
     }
     return [...mapa.entries()]
       .sort(([a], [b]) => b.localeCompare(a))
+      .slice(0, 3)                          // solo los últimos 3 días
       .map(([fecha, data]) => ({
         fecha,
         cantidad: data.cantidad,
