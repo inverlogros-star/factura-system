@@ -259,6 +259,7 @@ export default function ComparacionPage() {
   const [facturasMap, setFacturasMap] = useState<Record<string, Factura>>({})
   const [busqueda, setBusqueda]       = useState('')
   const [panelAbierto, setPanelAbierto] = useState<ResultadoComparacion | null>(null)
+  const [reciboDelPanel, setReciboDelPanel] = useState<ReciboMercancia | undefined>(undefined)
 
   const recargar = async () => {
     const [fs, rs, cs] = await Promise.all([storeFacturas.getAll(), storeRecibos.getAll(), storeComparaciones.getAll()])
@@ -268,10 +269,13 @@ export default function ComparacionPage() {
   }
   useEffect(() => { recargar() }, [])
 
-  // Recargar recibos frescos antes de abrir el panel
+  // Cargar recibo fresco desde la BD y pasarlo directamente al panel
   const abrirPanel = async (resultado: ResultadoComparacion) => {
+    // Obtener recibos frescos de la BD (no del estado en memoria)
     const recibosActualizados = await storeRecibos.getAll()
     setRecibos(recibosActualizados)
+    const recibo = recibosActualizados.find((r: ReciboMercancia) => r.id === resultado.reciboId)
+    setReciboDelPanel(recibo)
     setPanelAbierto(resultado)
   }
 
@@ -584,8 +588,8 @@ export default function ComparacionPage() {
         <PanelDiferencias
           resultado={panelAbierto}
           factura={facturasMap[panelAbierto.facturaId] ?? ({} as Factura)}
-          recibo={recibos.find(r => r.id === panelAbierto.reciboId)}
-          onClose={() => setPanelAbierto(null)}
+          recibo={reciboDelPanel ?? recibos.find(r => r.id === panelAbierto.reciboId)}
+          onClose={() => { setPanelAbierto(null); setReciboDelPanel(undefined) }}
           onEliminar={() => eliminarComparacion(panelAbierto.id, panelAbierto.facturaId)}
         />
       )}

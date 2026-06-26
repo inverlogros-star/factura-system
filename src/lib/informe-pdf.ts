@@ -259,31 +259,36 @@ export async function generarInformePDF(
 
   // Calcular grupos de IVA de la factura
   const ivaF = calcularIvaFactura(factura)
-  const ivaRec = Math.round(recibo?.totales?.iva       ?? 0)
-  const iconsRec = Math.round(recibo?.totales?.iconsumo ?? 0)
-  const ibuaRec  = Math.round(recibo?.totales?.ibua     ?? 0)
-  const icuiRec  = Math.round(recibo?.totales?.icui     ?? 0)
+  const ivaRec    = Math.round(recibo?.totales?.iva       ?? 0)
+  const iconsRec  = Math.round(recibo?.totales?.iconsumo  ?? 0)
+  const ibuaRec   = Math.round(recibo?.totales?.ibua      ?? 0)
+  const icuiRec   = Math.round(recibo?.totales?.icui      ?? 0)
+  const brutoRec  = Math.round(recibo?.totales?.bruto     ?? 0)
+  const netoRec   = Math.round(recibo?.totales?.subtotalNeto ?? 0)
 
-  const difBase5  = Math.round(ivaF.base5)  - 0        // base recibo no disponible individual
-  const difIva5   = Math.round(ivaF.iva5)   - 0
-  const difBase19 = Math.round(ivaF.base19) - 0
-  const difIva19  = Math.round(ivaF.iva19)  - 0
+  // Distribución proporcional del IVA del recibo según tasas de la factura
+  const totalIvaFact = Math.round(ivaF.iva5 + ivaF.iva19) || 1
+  const ivaRec5   = ivaRec > 0 && ivaF.iva5  > 0 ? Math.round(ivaRec * (ivaF.iva5  / totalIvaFact)) : 0
+  const ivaRec19  = ivaRec > 0 && ivaF.iva19 > 0 ? Math.round(ivaRec * (ivaF.iva19 / totalIvaFact)) : 0
+  const base5Rec  = ivaRec5  > 0 ? Math.round(ivaRec5  / 0.05) : (netoRec > 0 && ivaF.base5  > 0 ? Math.round(netoRec * (ivaF.base5  / (ivaF.base5+ivaF.base19+ivaF.base0||1))) : 0)
+  const base19Rec = ivaRec19 > 0 ? Math.round(ivaRec19 / 0.19) : (netoRec > 0 && ivaF.base19 > 0 ? Math.round(netoRec * (ivaF.base19 / (ivaF.base5+ivaF.base19+ivaF.base0||1))) : 0)
+
   const difIvaTotal = Math.round(ivaF.iva5 + ivaF.iva19) - ivaRec
 
   const filasContables = [
-    ['14351015', 'Base gravable IVA 5%',    `$${fmt(Math.round(ivaF.base5))}`,             '—',               ivaF.base5  > 0 ? `$${fmt(Math.round(ivaF.base5))}` : '$0'],
-    ['24081015', 'IVA 5%',                  `$${fmt(Math.round(ivaF.iva5))}`,              '—',               ivaF.iva5   > 0 ? `$${fmt(Math.round(ivaF.iva5))}` : '$0'],
-    ['14351007', 'Base gravable IVA 19%',   `$${fmt(Math.round(ivaF.base19))}`,            '—',               ivaF.base19 > 0 ? `$${fmt(Math.round(ivaF.base19))}` : '$0'],
-    ['24081007', 'IVA 19%',                 `$${fmt(Math.round(ivaF.iva19))}`,             '—',               ivaF.iva19  > 0 ? `$${fmt(Math.round(ivaF.iva19))}` : '$0'],
-    ['14351011', 'Base Impoconsumo',        '—',                                           `$${fmt(iconsRec)}`, iconsRec > 0 ? `$${fmt(iconsRec)}` : '$0'],
-    ['14351012', 'Base IBUA',               '—',                                           `$${fmt(ibuaRec)}`,  ibuaRec  > 0 ? `$${fmt(ibuaRec)}` : '$0'],
-    ['14351013', 'Base ICUI',               '—',                                           `$${fmt(icuiRec)}`,  icuiRec  > 0 ? `$${fmt(icuiRec)}` : '$0'],
-    ['240803',   'Total IVA (Fact. vs Rec)',`$${fmt(Math.round(ivaF.iva5+ivaF.iva19))}`,  `$${fmt(ivaRec)}`,   `$${fmt(difIvaTotal)}`],
-    ['220505',   'TOTAL A PAGAR (Cuentas por Pagar)', `$${fmt(totalFactura)}`,            `$${fmt(totalRecibo)}`, `$${fmt(difTotal)}`],
+    ['14351015', 'Base gravable IVA 5%',          `$${fmt(Math.round(ivaF.base5))}`,           base5Rec  > 0 ? `$${fmt(base5Rec)}`  : '—', base5Rec  > 0 ? `$${fmt(Math.round(ivaF.base5) - base5Rec)}`  : `$${fmt(Math.round(ivaF.base5))}`],
+    ['24081015', 'IVA 5%',                        `$${fmt(Math.round(ivaF.iva5))}`,            ivaRec5   > 0 ? `$${fmt(ivaRec5)}`   : '—', `$${fmt(Math.round(ivaF.iva5) - ivaRec5)}`],
+    ['14351007', 'Base gravable IVA 19%',         `$${fmt(Math.round(ivaF.base19))}`,          base19Rec > 0 ? `$${fmt(base19Rec)}` : '—', base19Rec > 0 ? `$${fmt(Math.round(ivaF.base19) - base19Rec)}` : `$${fmt(Math.round(ivaF.base19))}`],
+    ['24081007', 'IVA 19%',                       `$${fmt(Math.round(ivaF.iva19))}`,           ivaRec19  > 0 ? `$${fmt(ivaRec19)}`  : '—', `$${fmt(Math.round(ivaF.iva19) - ivaRec19)}`],
+    ['14351011', 'Base Impoconsumo',              '—',                                         iconsRec  > 0 ? `$${fmt(iconsRec)}` : '$0', iconsRec > 0 ? `-$${fmt(iconsRec)}` : '$0'],
+    ['14351012', 'Base IBUA',                     '—',                                         ibuaRec   > 0 ? `$${fmt(ibuaRec)}`  : '$0', ibuaRec  > 0 ? `-$${fmt(ibuaRec)}`  : '$0'],
+    ['14351013', 'Base ICUI',                     '—',                                         icuiRec   > 0 ? `$${fmt(icuiRec)}`  : '$0', icuiRec  > 0 ? `-$${fmt(icuiRec)}`  : '$0'],
+    ['240803',   'Total IVA',                     `$${fmt(Math.round(ivaF.iva5+ivaF.iva19))}`, `$${fmt(ivaRec)}`,   `$${fmt(difIvaTotal)}`],
+    ['220505',   'TOTAL A PAGAR',                 `$${fmt(totalFactura)}`,                     `$${fmt(totalRecibo)}`, `$${fmt(difTotal)}`],
   ].filter(f => {
-    const v2 = String(f[2]).replace(/[$,.\s]/g, '')
-    const v3 = String(f[3]).replace(/[$,.\s]/g, '')
-    return v2 !== '0' || v3 !== '0'
+    const v2 = String(f[2]).replace(/[$,.\s\-+]/g, '')
+    const v3 = String(f[3]).replace(/[$,.\s\-+]/g, '')
+    return v2 !== '0' || (v3 !== '0' && v3 !== '—')
   })
 
   if (filasContables.length > 0) {
