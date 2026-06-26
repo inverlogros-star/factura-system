@@ -35,9 +35,10 @@ const ESTADO_COLOR: Record<string, string> = {
 }
 
 // Panel de diferencias detalladas
-function PanelDiferencias({ resultado, factura, onClose, onEliminar }: {
+function PanelDiferencias({ resultado, factura, recibo, onClose, onEliminar }: {
   resultado: ResultadoComparacion
   factura: Factura
+  recibo?: ReciboMercancia
   onClose: () => void
   onEliminar: () => void
 }) {
@@ -107,6 +108,91 @@ function PanelDiferencias({ resultado, factura, onClose, onEliminar }: {
             </p>
           </div>
         </div>
+          )
+        })()}
+
+        {/* ── CUADRO COMPARATIVO DE IMPUESTOS ── */}
+        {factura.productos.length > 0 && (() => {
+          // Calcular impuestos de la FACTURA agrupados por tasa
+          const impFact: Record<string, {base:number; iva:number}> = {}
+          let impFact0 = 0, impFact5 = 0, impFact19 = 0
+          let baseFact0 = 0, baseFact5 = 0, baseFact19 = 0
+          let iconsumoFact = 0, ibuaFact = 0, icuiFact = 0
+          for (const p of factura.productos) {
+            const ivaV  = (p as any).ivaValor ?? p.impuesto
+            let tasa = (p as any).tasaIva ?? 0
+            if (tasa === 0 && ivaV > 0 && p.subtotal > 0) {
+              const c = Math.round((ivaV / p.subtotal) * 100)
+              if (c >= 4 && c <= 6) tasa = 5
+              else if (c >= 17 && c <= 21) tasa = 19
+            }
+            if (tasa === 5)       { baseFact5  += p.subtotal; impFact5  += ivaV }
+            else if (tasa === 19) { baseFact19 += p.subtotal; impFact19 += ivaV }
+            else                  { baseFact0  += p.subtotal }
+            iconsumoFact += (p as any).iconsumo || 0
+            ibuaFact     += (p as any).ibua     || 0
+            icuiFact     += (p as any).icui     || 0
+          }
+
+          // Impuestos del RECIBO desde totales del objeto recibo
+          const t = recibo?.totales
+          const ivaRec      = Math.round(t?.iva       ?? 0)
+          const iconsumoRec = Math.round(t?.iconsumo  ?? 0)
+          const ibuaRec     = Math.round(t?.ibua      ?? 0)
+          const icuiRec     = Math.round(t?.icui      ?? 0)
+          const totalIvaFact  = Math.round(impFact5 + impFact19)
+          const totalIvaRec   = ivaRec
+          const difIva        = totalIvaFact - totalIvaRec
+          const difIconsumo   = Math.round(iconsumoFact) - iconsumoRec
+          const difIbua       = Math.round(ibuaFact) - ibuaRec
+          const difIcui       = Math.round(icuiFact) - icuiRec
+
+          const filas = [
+            { cuenta: '240801', concepto: 'Base IVA 5%',      factura: Math.round(baseFact5),  recibo: '—',    dif: '—',    esBase: true },
+            { cuenta: '240801', concepto: 'IVA 5%',           factura: Math.round(impFact5),   recibo: '—',    dif: Math.round(impFact5), esBase: false },
+            { cuenta: '240802', concepto: 'Base IVA 19%',     factura: Math.round(baseFact19), recibo: '—',    dif: '—',    esBase: true },
+            { cuenta: '240802', concepto: 'IVA 19%',          factura: Math.round(impFact19),  recibo: '—',    dif: Math.round(impFact19), esBase: false },
+            { cuenta: '240803', concepto: 'Total IVA',        factura: totalIvaFact, recibo: totalIvaRec, dif: difIva, esBase: false },
+            { cuenta: '240804', concepto: 'Impoconsumo',      factura: Math.round(iconsumoFact), recibo: iconsumoRec, dif: difIconsumo, esBase: false },
+            { cuenta: '240805', concepto: 'IBUA',             factura: Math.round(ibuaFact),   recibo: ibuaRec,    dif: difIbua, esBase: false },
+            { cuenta: '240806', concepto: 'ICUI',             factura: Math.round(icuiFact),   recibo: icuiRec,    dif: difIcui, esBase: false },
+          ].filter(f => !f.esBase || (typeof f.factura === 'number' && f.factura > 0))
+
+          return (
+            <div className="bg-white rounded-lg border overflow-hidden">
+              <div className="px-5 py-3 bg-indigo-50 border-b border-indigo-100 flex items-center justify-between">
+                <h3 className="font-semibold text-indigo-800 text-sm">Cuadro Comparativo de Impuestos — Factura vs Recibo</h3>
+                <span className="text-xs text-indigo-500">Para corrección de cuentas contables</span>
+              </div>
+              <table className="w-full text-xs">
+                <thead className="bg-indigo-700 text-white">
+                  <tr>
+                    <th className="px-3 py-2 text-left">Cta. Contable</th>
+                    <th className="px-3 py-2 text-left">Concepto</th>
+                    <th className="px-3 py-2 text-right">Factura</th>
+                    <th className="px-3 py-2 text-right">Recibo</th>
+                    <th className="px-3 py-2 text-right">Diferencia</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-100">
+                  {filas.map((f, i) => {
+                    const dif = typeof f.dif === 'number' ? f.dif : null
+                    const hasDif = dif !== null && Math.abs(dif) >= 1
+                    return (
+                      <tr key={i} className={f.esBase ? 'bg-gray-50 text-gray-500 italic' : hasDif ? 'bg-red-50' : 'bg-white'}>
+                        <td className="px-3 py-2 font-mono text-gray-500">{f.cuenta}</td>
+                        <td className="px-3 py-2 font-medium">{f.concepto}</td>
+                        <td className="px-3 py-2 text-right text-blue-700">${typeof f.factura === 'number' ? fmt(f.factura) : f.factura}</td>
+                        <td className="px-3 py-2 text-right text-green-700">{typeof f.recibo === 'number' ? `$${fmt(f.recibo)}` : f.recibo}</td>
+                        <td className={`px-3 py-2 text-right font-bold ${hasDif ? 'text-red-600' : 'text-emerald-600'}`}>
+                          {dif !== null ? (Math.abs(dif) < 1 ? '$0' : `${dif > 0 ? '+' : ''}$${fmt(dif)}`) : '—'}
+                        </td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
+            </div>
           )
         })()}
 
@@ -476,6 +562,7 @@ export default function ComparacionPage() {
         <PanelDiferencias
           resultado={panelAbierto}
           factura={facturasMap[panelAbierto.facturaId] ?? ({} as Factura)}
+          recibo={recibos.find(r => r.id === panelAbierto.reciboId)}
           onClose={() => setPanelAbierto(null)}
           onEliminar={() => eliminarComparacion(panelAbierto.id, panelAbierto.facturaId)}
         />
