@@ -280,7 +280,11 @@ export async function generarInformePDF(
     ['14351013', 'Base ICUI',               '—',                                           `$${fmt(icuiRec)}`,  icuiRec  > 0 ? `$${fmt(icuiRec)}` : '$0'],
     ['240803',   'Total IVA (Fact. vs Rec)',`$${fmt(Math.round(ivaF.iva5+ivaF.iva19))}`,  `$${fmt(ivaRec)}`,   `$${fmt(difIvaTotal)}`],
     ['220505',   'TOTAL A PAGAR (Cuentas por Pagar)', `$${fmt(totalFactura)}`,            `$${fmt(totalRecibo)}`, `$${fmt(difTotal)}`],
-  ].filter(f => f[2] !== '$0' || f[3] !== '—' || f[3] !== '$0')
+  ].filter(f => {
+    const v2 = String(f[2]).replace(/[$,.\s]/g, '')
+    const v3 = String(f[3]).replace(/[$,.\s]/g, '')
+    return v2 !== '0' || v3 !== '0'
+  })
 
   if (filasContables.length > 0) {
     doc.setFontSize(9); doc.setFont('helvetica', 'bold')
