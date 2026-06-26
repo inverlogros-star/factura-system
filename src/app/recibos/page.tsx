@@ -3,6 +3,7 @@ import { useEffect, useRef, useState, useMemo } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Upload, Trash2, PackageCheck, Eye, FileSpreadsheet, FileText, FileCode, Bug, CheckSquare, Square, Database, CalendarIcon, BarChart2, ChevronDown, ChevronUp } from 'lucide-react'
+import { fmtRecibo } from '@/lib/utils'
 import { parsearReciboXML } from '@/lib/parser-dian'
 import { parsearReciboExcel } from '@/lib/parser-recibo-excel'
 import { parsearReciboPDF } from '@/lib/parser-recibo-pdf'
@@ -327,7 +328,7 @@ export default function RecibosPage() {
                         ? <CheckSquare size={18} className="text-blue-600" />
                         : <Square size={18} className="text-gray-300" />}
                     </td>
-                    <td className="px-3 py-3 font-mono font-medium">{r.numeroRecibo}</td>
+                    <td className="px-3 py-3 font-mono font-medium">{fmtRecibo(r.numeroRecibo)}</td>
                     <td className="px-3 py-3">
                       {r.numeroFacturaProveedor
                         ? <span className="bg-blue-100 text-blue-800 font-bold font-mono px-2 py-0.5 rounded text-xs">{r.numeroFacturaProveedor}</span>

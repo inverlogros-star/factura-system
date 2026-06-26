@@ -4,6 +4,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { GitCompareArrows, ChevronDown, ChevronUp, FileDown, Trash2, CheckSquare, Square, Eye, AlertTriangle, CheckCircle2, Search, FileWarning, X } from 'lucide-react'
+import { fmtRecibo } from '@/lib/utils'
 import { storeFacturas, storeRecibos, storeComparaciones } from '@/lib/store'
 import { compararFacturaConRecibo, encontrarReciboPorFactura, ultimos4Digitos } from '@/lib/comparador'
 import { generarInformePDF } from '@/lib/informe-pdf'
@@ -64,7 +65,7 @@ function PanelDiferencias({ resultado, factura, onClose, onEliminar }: {
       <div className="flex items-center justify-between px-8 py-4 border-b bg-white shrink-0">
         <div>
           <h2 className="text-xl font-bold text-gray-900">
-            Comparación: {resultado.numeroFactura} ↔ Recibo {resultado.numeroRecibo}
+            Comparación: {resultado.numeroFactura} ↔ Recibo {fmtRecibo(resultado.numeroRecibo)}
           </h2>
           <p className="text-sm text-gray-500">{resultado.proveedor}</p>
         </div>
@@ -419,7 +420,7 @@ export default function ComparacionPage() {
                             : recibo
                             ? <span className="text-green-700 font-medium flex items-center gap-1">
                                 <CheckCircle2 size={12} />
-                                <span>{recibo.numeroRecibo}</span>
+                                <span>{fmtRecibo(recibo.numeroRecibo)}</span>
                                 {recibo.numeroFacturaProveedor && (
                                   <span className="bg-green-100 text-green-700 font-mono px-1 rounded">
                                     {recibo.numeroFacturaProveedor}

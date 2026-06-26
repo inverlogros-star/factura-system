@@ -2,6 +2,7 @@
 import type { ReciboMercancia } from '@/types'
 import { X, Printer } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import { fmtRecibo } from '@/lib/utils'
 
 function fmt(n: number | undefined) {
   return Number(n || 0).toLocaleString('es-CO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
@@ -66,7 +67,7 @@ export default function DetalleRecibo({ recibo, onClose }: { recibo: ReciboMerca
 
     ventana.document.write(`<!DOCTYPE html>
 <html lang="es"><head><meta charset="UTF-8">
-<title>Recibo ${recibo.numeroRecibo}</title>
+<title>Recibo ${recibo.numeroRecibo.slice(2)}</title>
 <style>
   *{margin:0;padding:0;box-sizing:border-box}
   body{font-family:Arial,sans-serif;font-size:11px;color:#111;padding:15px}
@@ -96,7 +97,7 @@ export default function DetalleRecibo({ recibo, onClose }: { recibo: ReciboMerca
   <h1>SUPERMERCADOS PACARDYL</h1>
   <h2>INVERSIONES LOGROS S.A. — NIT: 811.031.830-1</h2>
   <div class="t">RECIBO DE MERCANCÍA</div>
-  <div class="n">No. ${recibo.numeroRecibo}</div>
+  <div class="n">No. ${recibo.numeroRecibo.slice(2)}</div>
 </div>
 <div class="grid">
   <div class="box"><div class="l">Proveedor</div><div class="v">${recibo.proveedor || '—'}</div></div>
@@ -133,7 +134,7 @@ export default function DetalleRecibo({ recibo, onClose }: { recibo: ReciboMerca
   </table>
 </div>
 <div class="ftr">
-  <span>SUPERMERCADOS PACARDYL — Recibo No. ${recibo.numeroRecibo} — Factura: ${recibo.numeroFacturaProveedor || '—'}</span>
+  <span>SUPERMERCADOS PACARDYL — Recibo No. ${recibo.numeroRecibo.slice(2)} — Factura: ${recibo.numeroFacturaProveedor || '—'}</span>
   <span>Generado: ${new Date().toLocaleString('es-CO')}</span>
 </div>
 </body></html>`)
@@ -145,7 +146,7 @@ export default function DetalleRecibo({ recibo, onClose }: { recibo: ReciboMerca
       {/* Header */}
       <div className="flex items-center justify-between px-8 py-4 border-b bg-white shrink-0">
         <div>
-          <h2 className="text-xl font-bold text-gray-900">Recibo {recibo.numeroRecibo}</h2>
+          <h2 className="text-xl font-bold text-gray-900">Recibo {fmtRecibo(recibo.numeroRecibo)}</h2>
           <p className="text-sm text-gray-500 mt-0.5">{recibo.proveedor} — NIT {recibo.nitProveedor}</p>
         </div>
         <div className="flex items-center gap-3">
