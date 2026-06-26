@@ -3,7 +3,7 @@ import { useEffect, useState, useMemo } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { GitCompareArrows, ChevronDown, ChevronUp, FileDown, Trash2, CheckSquare, Square, Eye, AlertTriangle, CheckCircle2, Search, FileWarning, X } from 'lucide-react'
+import { GitCompareArrows, ChevronDown, ChevronUp, FileDown, Trash2, CheckSquare, Square, Eye, AlertTriangle, CheckCircle2, Search, FileWarning, X, CalendarIcon } from 'lucide-react'
 import { fmtRecibo } from '@/lib/utils'
 import { storeFacturas, storeRecibos, storeComparaciones } from '@/lib/store'
 import { compararFacturaConRecibo, encontrarReciboPorFactura, ultimos4Digitos } from '@/lib/comparador'
@@ -258,6 +258,8 @@ export default function ComparacionPage() {
   const [procesando, setProcesando]   = useState(false)
   const [facturasMap, setFacturasMap] = useState<Record<string, Factura>>({})
   const [busqueda, setBusqueda]       = useState('')
+  const [fechaDesde, setFechaDesde]   = useState('')
+  const [fechaHasta, setFechaHasta]   = useState('')
   const [panelAbierto, setPanelAbierto] = useState<ResultadoComparacion | null>(null)
   const [reciboDelPanel, setReciboDelPanel] = useState<ReciboMercancia | undefined>(undefined)
 
@@ -358,9 +360,10 @@ export default function ComparacionPage() {
   const facturasFiltradas = useMemo(() => {
     const q = busqueda.trim().toLowerCase()
     return facturas.filter(f => {
-      // Excluir TODAS las notas crédito — van al módulo "Notas Crédito POS"
-      // La comparación es solo para FACTURAS contra RECIBOS de mercancía
       if (f.tipoDocumento === 'nota_credito' || f.tipoDocumento === 'nota_debito') return false
+      // Filtro por rango de fechas
+      if (fechaDesde && f.fecha && f.fecha < fechaDesde) return false
+      if (fechaHasta && f.fecha && f.fecha > fechaHasta) return false
       if (!q) return true
       const nitNorm = (f.nitProveedor || '').replace(/[.\-\s]/g, '')
       const qNorm = q.replace(/[.\-\s]/g, '')
@@ -368,7 +371,7 @@ export default function ComparacionPage() {
         (f.proveedor || '').toLowerCase().includes(q) ||
         nitNorm.includes(qNorm)
     })
-  }, [facturas, busqueda])
+  }, [facturas, busqueda, fechaDesde, fechaHasta])
 
   const conRecibo    = facturasFiltradas.filter(f => encontrarReciboPorFactura(f, recibos))
   const sinRecibo    = facturasFiltradas.filter(f => !encontrarReciboPorFactura(f, recibos))
@@ -430,26 +433,83 @@ export default function ComparacionPage() {
           <div className="flex items-center justify-between gap-3 flex-wrap">
             <CardTitle className="text-base">
               Facturas cargadas ({facturasFiltradas.length})
-              {busqueda && <span className="ml-2 text-sm font-normal text-gray-400">de {facturas.length} total</span>}
-            </CardTitle>
-            {/* Barra de búsqueda dentro del card */}
-            <div className="relative min-w-[300px]">
-              <Search size={14} className="absolute left-3 top-2.5 text-gray-400" />
-              <input
-                type="text"
-                placeholder="Buscar proveedor, NIT o No. factura..."
-                value={busqueda}
-                onChange={e => setBusqueda(e.target.value)}
-                className="w-full pl-8 pr-7 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-300 bg-gray-50"
-              />
-              {busqueda && (
-                <button onClick={() => setBusqueda('')} className="absolute right-2.5 top-2.5 text-gray-400 hover:text-gray-600">
-                  <X size={14} />
-                </button>
+              {(busqueda || fechaDesde || fechaHasta) && (
+                <span className="ml-2 text-sm font-normal text-gray-400">de {facturas.length} total</span>
               )}
-            </div>
+            </CardTitle>
           </div>
-          <p className="text-xs text-gray-400 mt-1 flex items-center gap-1">
+
+          {/* Filtros: calendarios + búsqueda */}
+          <div className="flex flex-wrap gap-3 mt-3 items-end">
+            {/* Fecha inicial */}
+            <div className="space-y-1">
+              <label className="text-xs font-semibold text-gray-500 flex items-center gap-1">
+                <CalendarIcon size={11} /> Desde
+              </label>
+              <div className="relative">
+                <input
+                  type="date"
+                  value={fechaDesde}
+                  onChange={e => setFechaDesde(e.target.value)}
+                  className="border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-300 bg-gray-50 cursor-pointer"
+                />
+                {fechaDesde && (
+                  <button onClick={() => setFechaDesde('')} className="absolute right-2 top-2.5 text-gray-400 hover:text-gray-600">
+                    <X size={13} />
+                  </button>
+                )}
+              </div>
+            </div>
+            {/* Fecha final */}
+            <div className="space-y-1">
+              <label className="text-xs font-semibold text-gray-500 flex items-center gap-1">
+                <CalendarIcon size={11} /> Hasta
+              </label>
+              <div className="relative">
+                <input
+                  type="date"
+                  value={fechaHasta}
+                  onChange={e => setFechaHasta(e.target.value)}
+                  className="border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-300 bg-gray-50 cursor-pointer"
+                />
+                {fechaHasta && (
+                  <button onClick={() => setFechaHasta('')} className="absolute right-2 top-2.5 text-gray-400 hover:text-gray-600">
+                    <X size={13} />
+                  </button>
+                )}
+              </div>
+            </div>
+            {/* Búsqueda */}
+            <div className="space-y-1 flex-1 min-w-[220px]">
+              <label className="text-xs font-semibold text-gray-500">Buscar</label>
+              <div className="relative">
+                <Search size={14} className="absolute left-3 top-2.5 text-gray-400" />
+                <input
+                  type="text"
+                  placeholder="Proveedor, NIT o No. factura..."
+                  value={busqueda}
+                  onChange={e => setBusqueda(e.target.value)}
+                  className="w-full pl-8 pr-7 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-300 bg-gray-50"
+                />
+                {busqueda && (
+                  <button onClick={() => setBusqueda('')} className="absolute right-2.5 top-2.5 text-gray-400 hover:text-gray-600">
+                    <X size={14} />
+                  </button>
+                )}
+              </div>
+            </div>
+            {/* Limpiar todo */}
+            {(fechaDesde || fechaHasta || busqueda) && (
+              <button
+                onClick={() => { setFechaDesde(''); setFechaHasta(''); setBusqueda('') }}
+                className="text-xs text-red-500 hover:text-red-700 px-2 py-2 rounded border border-red-200 hover:bg-red-50 whitespace-nowrap"
+              >
+                ✕ Limpiar filtros
+              </button>
+            )}
+          </div>
+
+          <p className="text-xs text-gray-400 mt-2 flex items-center gap-1">
             <CheckSquare size={11} className="text-blue-500" /> Marca las facturas pendientes con recibo detectado y haz clic en Comparar
           </p>
         </CardHeader>
