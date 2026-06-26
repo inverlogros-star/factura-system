@@ -134,12 +134,23 @@ function PanelDiferencias({ resultado, factura, recibo, onClose, onEliminar }: {
             icuiFact     += (p as any).icui     || 0
           }
 
-          // Impuestos del RECIBO desde totales del objeto recibo
+          // Impuestos del RECIBO — desde totales (header Ent_*) o sumando líneas
           const t = recibo?.totales
-          const ivaRec      = Math.round(t?.iva       ?? 0)
-          const iconsumoRec = Math.round(t?.iconsumo  ?? 0)
-          const ibuaRec     = Math.round(t?.ibua      ?? 0)
-          const icuiRec     = Math.round(t?.icui      ?? 0)
+          const ivaRec = t?.iva != null
+            ? Math.round(t.iva)
+            : Math.round((recibo?.productos ?? []).reduce((s: number, p: any) => s + (p.iva || 0), 0))
+          const iconsumoRec = t?.iconsumo != null
+            ? Math.round(t.iconsumo)
+            : Math.round((recibo?.productos ?? []).reduce((s: number, p: any) => s + (p.iconsumo || 0), 0))
+          const ibuaRec = t?.ibua != null
+            ? Math.round(t.ibua)
+            : Math.round((recibo?.productos ?? []).reduce((s: number, p: any) => s + (p.ibua || 0), 0))
+          const icuiRec = t?.icui != null
+            ? Math.round(t.icui)
+            : Math.round((recibo?.productos ?? []).reduce((s: number, p: any) => s + (p.icui || 0), 0))
+          const totalReciboReal = t?.neto != null
+            ? Math.round(t.neto)
+            : Math.round(Number(resultado.valorTotalRecibo))
           const totalIvaFact  = Math.round(impFact5 + impFact19)
           const totalIvaRec   = ivaRec
           const difIva        = totalIvaFact - totalIvaRec
@@ -148,18 +159,23 @@ function PanelDiferencias({ resultado, factura, recibo, onClose, onEliminar }: {
           const difIcui       = Math.round(icuiFact) - icuiRec
 
           const totalFact = Math.round(Number(factura.total))
-          const totalRec  = Math.round(Number(resultado.valorTotalRecibo))
+          const totalRec  = totalReciboReal
+          // Recibo no tiene IVA por tasa — solo total IVA
+          // Para bases del recibo, usar proporcional si hay total IVA
+          const base5Rec  = ivaRec > 0 && impFact5 > 0  ? Math.round(ivaRec * (impFact5  / (impFact5 + impFact19 || 1)) / 0.05)  : 0
+          const base19Rec = ivaRec > 0 && impFact19 > 0 ? Math.round(ivaRec * (impFact19 / (impFact5 + impFact19 || 1)) / 0.19) : 0
+
           const filas = [
-            { cuenta: '14351015', concepto: 'Base gravable IVA 5%',  factura: Math.round(baseFact5),    recibo: '—' as string|number, dif: Math.round(baseFact5), esBase: true },
-            { cuenta: '24081015', concepto: 'IVA 5%',                factura: Math.round(impFact5),     recibo: '—', dif: Math.round(impFact5),    esBase: false },
-            { cuenta: '14351007', concepto: 'Base gravable IVA 19%', factura: Math.round(baseFact19),   recibo: '—', dif: Math.round(baseFact19),   esBase: true },
-            { cuenta: '24081007', concepto: 'IVA 19%',               factura: Math.round(impFact19),    recibo: '—', dif: Math.round(impFact19),    esBase: false },
-            { cuenta: '14351011', concepto: 'Base Impoconsumo',      factura: '—' as string|number,     recibo: iconsumoRec, dif: -iconsumoRec, esBase: false },
-            { cuenta: '14351012', concepto: 'Base IBUA',             factura: '—',                      recibo: ibuaRec,     dif: -ibuaRec,     esBase: false },
-            { cuenta: '14351013', concepto: 'Base ICUI',             factura: '—',                      recibo: icuiRec,     dif: -icuiRec,     esBase: false },
-            { cuenta: '240803',   concepto: 'Total IVA',             factura: totalIvaFact,             recibo: totalIvaRec, dif: difIva,       esBase: false },
-            { cuenta: '220505',   concepto: 'TOTAL A PAGAR',         factura: totalFact,                recibo: totalRec,    dif: totalFact - totalRec, esBase: false },
-          ].filter(f => (typeof f.factura === 'number' && f.factura !== 0) || (typeof f.recibo === 'number' && f.recibo !== 0))
+            { cuenta: '14351015', concepto: 'Base gravable IVA 5%',  factura: Math.round(baseFact5),  recibo: base5Rec  || (0 as string|number), dif: Math.round(baseFact5)  - (base5Rec  || 0), esBase: true  },
+            { cuenta: '24081015', concepto: 'IVA 5%',                factura: Math.round(impFact5),   recibo: ivaRec > 0 ? Math.round(ivaRec * (impFact5 / (impFact5 + impFact19 || 1))) : 0, dif: Math.round(impFact5) - Math.round(ivaRec * (impFact5 / (impFact5 + impFact19 || 1))), esBase: false },
+            { cuenta: '14351007', concepto: 'Base gravable IVA 19%', factura: Math.round(baseFact19), recibo: base19Rec || 0, dif: Math.round(baseFact19) - (base19Rec || 0), esBase: true  },
+            { cuenta: '24081007', concepto: 'IVA 19%',               factura: Math.round(impFact19),  recibo: ivaRec > 0 ? Math.round(ivaRec * (impFact19 / (impFact5 + impFact19 || 1))) : 0, dif: Math.round(impFact19) - Math.round(ivaRec * (impFact19 / (impFact5 + impFact19 || 1))), esBase: false },
+            { cuenta: '14351011', concepto: 'Base Impoconsumo',      factura: Math.round(iconsumoFact), recibo: iconsumoRec, dif: Math.round(iconsumoFact) - iconsumoRec, esBase: false },
+            { cuenta: '14351012', concepto: 'Base IBUA',             factura: Math.round(ibuaFact),   recibo: ibuaRec,     dif: Math.round(ibuaFact) - ibuaRec,     esBase: false },
+            { cuenta: '14351013', concepto: 'Base ICUI',             factura: Math.round(icuiFact),   recibo: icuiRec,     dif: Math.round(icuiFact) - icuiRec,     esBase: false },
+            { cuenta: '240803',   concepto: 'Total IVA',             factura: totalIvaFact,           recibo: ivaRec,      dif: totalIvaFact - ivaRec,              esBase: false },
+            { cuenta: '220505',   concepto: 'TOTAL A PAGAR',         factura: totalFact,              recibo: totalRec,    dif: totalFact - totalRec,               esBase: false },
+          ]
 
           return (
             <div className="bg-white rounded-lg border overflow-hidden">
