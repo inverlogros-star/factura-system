@@ -420,64 +420,6 @@ export default function ComparacionPage() {
         </div>
       </div>
 
-      {/* ── SELECTOR DE FECHAS — primer elemento visible ── */}
-      <Card className="border-blue-200 bg-blue-50/40">
-        <CardContent className="p-5">
-          <p className="text-xs text-blue-600 font-semibold mb-3">📦 Filtro por fecha del Recibo de Mercancía</p>
-          <div className="flex flex-wrap gap-4 items-end">
-            <div className="space-y-1.5">
-              <label className="text-xs font-bold text-blue-700 flex items-center gap-1.5">
-                <CalendarIcon size={13} /> Fecha recibo inicial
-              </label>
-              <div className="relative">
-                <input
-                  type="date"
-                  value={fechaDesde}
-                  onChange={e => setFechaDesde(e.target.value)}
-                  className="border-2 border-blue-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:border-blue-500 bg-white cursor-pointer font-medium min-w-[150px]"
-                />
-              </div>
-            </div>
-            <div className="space-y-1.5">
-              <label className="text-xs font-bold text-blue-700 flex items-center gap-1.5">
-                <CalendarIcon size={13} /> Fecha recibo final
-              </label>
-              <div className="relative">
-                <input
-                  type="date"
-                  value={fechaHasta}
-                  onChange={e => setFechaHasta(e.target.value)}
-                  className="border-2 border-blue-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:border-blue-500 bg-white cursor-pointer font-medium min-w-[150px]"
-                />
-              </div>
-            </div>
-            <div className="flex-1 space-y-1.5">
-              <label className="text-xs font-bold text-blue-700">Buscar proveedor o NIT</label>
-              <div className="relative">
-                <Search size={14} className="absolute left-3 top-2.5 text-gray-400" />
-                <input
-                  type="text"
-                  placeholder="Nombre o NIT..."
-                  value={busqueda}
-                  onChange={e => setBusqueda(e.target.value)}
-                  className="w-full pl-8 pr-7 py-2.5 border-2 border-blue-200 rounded-lg text-sm focus:outline-none focus:border-blue-500 bg-white"
-                />
-                {busqueda && (
-                  <button onClick={() => setBusqueda('')} className="absolute right-2.5 top-2.5 text-gray-400 hover:text-gray-600">
-                    <X size={14} />
-                  </button>
-                )}
-              </div>
-            </div>
-            <div className="text-center">
-              <p className="text-xs text-blue-500 font-semibold mb-1">Mostrando</p>
-              <span className="text-2xl font-bold text-blue-700">{facturasFiltradas.length}</span>
-              <p className="text-xs text-blue-400">de {facturas.filter(f => f.tipoDocumento !== 'nota_credito' && f.tipoDocumento !== 'nota_debito').length}</p>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
-
       {/* Resumen estadístico */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
         {[
