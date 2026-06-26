@@ -271,15 +271,16 @@ export async function generarInformePDF(
   const difIvaTotal = Math.round(ivaF.iva5 + ivaF.iva19) - ivaRec
 
   const filasContables = [
-    ['14351015', 'Base gravable IVA 5%',   `$${fmt(Math.round(ivaF.base5))}`,  '—',                               ivaF.base5 > 0 ? `$${fmt(Math.round(ivaF.base5))}` : '$0'],
-    ['24081015', 'IVA 5%',                 `$${fmt(Math.round(ivaF.iva5))}`,   '—',                               ivaF.iva5  > 0 ? `$${fmt(Math.round(ivaF.iva5))}` : '$0'],
-    ['14351007', 'Base gravable IVA 19%',  `$${fmt(Math.round(ivaF.base19))}`, '—',                               ivaF.base19 > 0 ? `$${fmt(Math.round(ivaF.base19))}` : '$0'],
-    ['24081007', 'IVA 19%',                `$${fmt(Math.round(ivaF.iva19))}`,  '—',                               ivaF.iva19  > 0 ? `$${fmt(Math.round(ivaF.iva19))}` : '$0'],
-    ['240803',   'Total IVA (Fact. vs Rec)', `$${fmt(Math.round(ivaF.iva5+ivaF.iva19))}`, `$${fmt(ivaRec)}`,     `$${fmt(difIvaTotal)}`],
-    ['240804',   'Impoconsumo',             `$${fmt(0)}`,                       `$${fmt(iconsRec)}`,               `$${fmt(-iconsRec)}`],
-    ['240805',   'IBUA',                    `$${fmt(0)}`,                       `$${fmt(ibuaRec)}`,                `$${fmt(-ibuaRec)}`],
-    ['240806',   'ICUI',                    `$${fmt(0)}`,                       `$${fmt(icuiRec)}`,                `$${fmt(-icuiRec)}`],
-  ].filter(f => f[2] !== '$0' || f[3] !== '—')
+    ['14351015', 'Base gravable IVA 5%',    `$${fmt(Math.round(ivaF.base5))}`,             '—',               ivaF.base5  > 0 ? `$${fmt(Math.round(ivaF.base5))}` : '$0'],
+    ['24081015', 'IVA 5%',                  `$${fmt(Math.round(ivaF.iva5))}`,              '—',               ivaF.iva5   > 0 ? `$${fmt(Math.round(ivaF.iva5))}` : '$0'],
+    ['14351007', 'Base gravable IVA 19%',   `$${fmt(Math.round(ivaF.base19))}`,            '—',               ivaF.base19 > 0 ? `$${fmt(Math.round(ivaF.base19))}` : '$0'],
+    ['24081007', 'IVA 19%',                 `$${fmt(Math.round(ivaF.iva19))}`,             '—',               ivaF.iva19  > 0 ? `$${fmt(Math.round(ivaF.iva19))}` : '$0'],
+    ['14351011', 'Base Impoconsumo',        '—',                                           `$${fmt(iconsRec)}`, iconsRec > 0 ? `$${fmt(iconsRec)}` : '$0'],
+    ['14351012', 'Base IBUA',               '—',                                           `$${fmt(ibuaRec)}`,  ibuaRec  > 0 ? `$${fmt(ibuaRec)}` : '$0'],
+    ['14351013', 'Base ICUI',               '—',                                           `$${fmt(icuiRec)}`,  icuiRec  > 0 ? `$${fmt(icuiRec)}` : '$0'],
+    ['240803',   'Total IVA (Fact. vs Rec)',`$${fmt(Math.round(ivaF.iva5+ivaF.iva19))}`,  `$${fmt(ivaRec)}`,   `$${fmt(difIvaTotal)}`],
+    ['220505',   'TOTAL A PAGAR (Cuentas por Pagar)', `$${fmt(totalFactura)}`,            `$${fmt(totalRecibo)}`, `$${fmt(difTotal)}`],
+  ].filter(f => f[2] !== '$0' || f[3] !== '—' || f[3] !== '$0')
 
   if (filasContables.length > 0) {
     doc.setFontSize(9); doc.setFont('helvetica', 'bold')
@@ -306,10 +307,17 @@ export async function generarInformePDF(
           if (Math.abs(val) >= 1) data.cell.styles.textColor = val > 0 ? [185, 28, 28] : [21, 128, 61]
           else data.cell.styles.textColor = [21, 128, 61]
         }
-        // Fila Total IVA en destaque
-        if (data.section === 'body' && data.row.index === 4) {
+        // Fila Total IVA en destaque (índice 7 = fila 240803)
+        if (data.section === 'body' && data.row.index === 7) {
           data.cell.styles.fillColor = [224, 231, 255]
           data.cell.styles.fontStyle = 'bold'
+        }
+        // Fila Total a Pagar 220505 en azul oscuro (última fila)
+        if (data.section === 'body' && data.row.index === 8) {
+          data.cell.styles.fillColor = [30, 64, 175]
+          data.cell.styles.textColor = [255, 255, 255]
+          data.cell.styles.fontStyle = 'bold'
+          data.cell.styles.fontSize = 9
         }
       },
       margin: { left: 10, right: 10 },

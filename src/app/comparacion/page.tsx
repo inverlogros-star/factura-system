@@ -147,16 +147,19 @@ function PanelDiferencias({ resultado, factura, recibo, onClose, onEliminar }: {
           const difIbua       = Math.round(ibuaFact) - ibuaRec
           const difIcui       = Math.round(icuiFact) - icuiRec
 
+          const totalFact = Math.round(Number(factura.total))
+          const totalRec  = Math.round(Number(resultado.valorTotalRecibo))
           const filas = [
-            { cuenta: '240801', concepto: 'Base IVA 5%',      factura: Math.round(baseFact5),  recibo: '—',    dif: '—',    esBase: true },
-            { cuenta: '240801', concepto: 'IVA 5%',           factura: Math.round(impFact5),   recibo: '—',    dif: Math.round(impFact5), esBase: false },
-            { cuenta: '240802', concepto: 'Base IVA 19%',     factura: Math.round(baseFact19), recibo: '—',    dif: '—',    esBase: true },
-            { cuenta: '240802', concepto: 'IVA 19%',          factura: Math.round(impFact19),  recibo: '—',    dif: Math.round(impFact19), esBase: false },
-            { cuenta: '240803', concepto: 'Total IVA',        factura: totalIvaFact, recibo: totalIvaRec, dif: difIva, esBase: false },
-            { cuenta: '240804', concepto: 'Impoconsumo',      factura: Math.round(iconsumoFact), recibo: iconsumoRec, dif: difIconsumo, esBase: false },
-            { cuenta: '240805', concepto: 'IBUA',             factura: Math.round(ibuaFact),   recibo: ibuaRec,    dif: difIbua, esBase: false },
-            { cuenta: '240806', concepto: 'ICUI',             factura: Math.round(icuiFact),   recibo: icuiRec,    dif: difIcui, esBase: false },
-          ].filter(f => !f.esBase || (typeof f.factura === 'number' && f.factura > 0))
+            { cuenta: '14351015', concepto: 'Base gravable IVA 5%',  factura: Math.round(baseFact5),    recibo: '—' as string|number, dif: Math.round(baseFact5), esBase: true },
+            { cuenta: '24081015', concepto: 'IVA 5%',                factura: Math.round(impFact5),     recibo: '—', dif: Math.round(impFact5),    esBase: false },
+            { cuenta: '14351007', concepto: 'Base gravable IVA 19%', factura: Math.round(baseFact19),   recibo: '—', dif: Math.round(baseFact19),   esBase: true },
+            { cuenta: '24081007', concepto: 'IVA 19%',               factura: Math.round(impFact19),    recibo: '—', dif: Math.round(impFact19),    esBase: false },
+            { cuenta: '14351011', concepto: 'Base Impoconsumo',      factura: '—' as string|number,     recibo: iconsumoRec, dif: -iconsumoRec, esBase: false },
+            { cuenta: '14351012', concepto: 'Base IBUA',             factura: '—',                      recibo: ibuaRec,     dif: -ibuaRec,     esBase: false },
+            { cuenta: '14351013', concepto: 'Base ICUI',             factura: '—',                      recibo: icuiRec,     dif: -icuiRec,     esBase: false },
+            { cuenta: '240803',   concepto: 'Total IVA',             factura: totalIvaFact,             recibo: totalIvaRec, dif: difIva,       esBase: false },
+            { cuenta: '220505',   concepto: 'TOTAL A PAGAR',         factura: totalFact,                recibo: totalRec,    dif: totalFact - totalRec, esBase: false },
+          ].filter(f => (typeof f.factura === 'number' && f.factura !== 0) || (typeof f.recibo === 'number' && f.recibo !== 0))
 
           return (
             <div className="bg-white rounded-lg border overflow-hidden">
@@ -179,7 +182,7 @@ function PanelDiferencias({ resultado, factura, recibo, onClose, onEliminar }: {
                     const dif = typeof f.dif === 'number' ? f.dif : null
                     const hasDif = dif !== null && Math.abs(dif) >= 1
                     return (
-                      <tr key={i} className={f.esBase ? 'bg-gray-50 text-gray-500 italic' : hasDif ? 'bg-red-50' : 'bg-white'}>
+                      <tr key={i} className={f.cuenta === '220505' ? 'bg-blue-600 text-white font-bold' : f.esBase ? 'bg-gray-50 text-gray-500 italic' : hasDif ? 'bg-red-50' : 'bg-white'}>
                         <td className="px-3 py-2 font-mono text-gray-500">{f.cuenta}</td>
                         <td className="px-3 py-2 font-medium">{f.concepto}</td>
                         <td className="px-3 py-2 text-right text-blue-700">${typeof f.factura === 'number' ? fmt(f.factura) : f.factura}</td>
