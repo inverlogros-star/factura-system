@@ -13,6 +13,24 @@ const TIPO_LABEL: Record<string, string> = {
   producto_no_encontrado: 'NO ENCONTRADO',
 }
 
+// Calcula grupos IVA de la factura
+function calcularIvaFactura(factura: Factura) {
+  let base5 = 0, iva5 = 0, base19 = 0, iva19 = 0, base0 = 0
+  for (const p of factura.productos) {
+    const ivaV = (p as any).ivaValor ?? p.impuesto
+    let tasa = (p as any).tasaIva ?? 0
+    if (tasa === 0 && ivaV > 0 && p.subtotal > 0) {
+      const c = Math.round((ivaV / p.subtotal) * 100)
+      if (c >= 4 && c <= 6) tasa = 5
+      else if (c >= 17 && c <= 21) tasa = 19
+    }
+    if (tasa === 5)       { base5  += p.subtotal; iva5  += ivaV }
+    else if (tasa === 19) { base19 += p.subtotal; iva19 += ivaV }
+    else                  { base0  += p.subtotal }
+  }
+  return { base5, iva5, base19, iva19, base0 }
+}
+
 export async function generarInformePDF(
   resultado: ResultadoComparacion,
   factura: Factura,
@@ -235,6 +253,68 @@ export async function generarInformePDF(
     },
     margin: { left: 10, right: 10 },
   })
+
+  // ── CUADRO CONTABLE DE IMPUESTOS ─────────────────────────────────────────────
+  const y2 = (doc as any).lastAutoTable.finalY + 8
+
+  // Calcular grupos de IVA de la factura
+  const ivaF = calcularIvaFactura(factura)
+  const ivaRec = Math.round(recibo?.totales?.iva       ?? 0)
+  const iconsRec = Math.round(recibo?.totales?.iconsumo ?? 0)
+  const ibuaRec  = Math.round(recibo?.totales?.ibua     ?? 0)
+  const icuiRec  = Math.round(recibo?.totales?.icui     ?? 0)
+
+  const difBase5  = Math.round(ivaF.base5)  - 0        // base recibo no disponible individual
+  const difIva5   = Math.round(ivaF.iva5)   - 0
+  const difBase19 = Math.round(ivaF.base19) - 0
+  const difIva19  = Math.round(ivaF.iva19)  - 0
+  const difIvaTotal = Math.round(ivaF.iva5 + ivaF.iva19) - ivaRec
+
+  const filasContables = [
+    ['14351015', 'Base gravable IVA 5%',   `$${fmt(Math.round(ivaF.base5))}`,  '—',                               ivaF.base5 > 0 ? `$${fmt(Math.round(ivaF.base5))}` : '$0'],
+    ['24081015', 'IVA 5%',                 `$${fmt(Math.round(ivaF.iva5))}`,   '—',                               ivaF.iva5  > 0 ? `$${fmt(Math.round(ivaF.iva5))}` : '$0'],
+    ['14351007', 'Base gravable IVA 19%',  `$${fmt(Math.round(ivaF.base19))}`, '—',                               ivaF.base19 > 0 ? `$${fmt(Math.round(ivaF.base19))}` : '$0'],
+    ['24081007', 'IVA 19%',                `$${fmt(Math.round(ivaF.iva19))}`,  '—',                               ivaF.iva19  > 0 ? `$${fmt(Math.round(ivaF.iva19))}` : '$0'],
+    ['240803',   'Total IVA (Fact. vs Rec)', `$${fmt(Math.round(ivaF.iva5+ivaF.iva19))}`, `$${fmt(ivaRec)}`,     `$${fmt(difIvaTotal)}`],
+    ['240804',   'Impoconsumo',             `$${fmt(0)}`,                       `$${fmt(iconsRec)}`,               `$${fmt(-iconsRec)}`],
+    ['240805',   'IBUA',                    `$${fmt(0)}`,                       `$${fmt(ibuaRec)}`,                `$${fmt(-ibuaRec)}`],
+    ['240806',   'ICUI',                    `$${fmt(0)}`,                       `$${fmt(icuiRec)}`,                `$${fmt(-icuiRec)}`],
+  ].filter(f => f[2] !== '$0' || f[3] !== '—')
+
+  if (filasContables.length > 0) {
+    doc.setFontSize(9); doc.setFont('helvetica', 'bold')
+    doc.text('CUADRO CONTABLE DE IMPUESTOS', 14, y2)
+
+    autoTable(doc, {
+      startY: y2 + 3,
+      head: [['Cuenta Contable', 'Concepto', 'Factura', 'Recibo', 'Diferencia']],
+      body: filasContables,
+      styles: { fontSize: 8, cellPadding: 2.5, halign: 'right' },
+      headStyles: { fillColor: [67, 56, 202], textColor: 255, fontStyle: 'bold', fontSize: 8 },
+      columnStyles: {
+        0: { cellWidth: 30, font: 'courier', halign: 'center' },
+        1: { cellWidth: 80, halign: 'left', fontStyle: 'bold' },
+        2: { cellWidth: 38, textColor: [30, 64, 175] },
+        3: { cellWidth: 38, textColor: [21, 128, 61] },
+        4: { cellWidth: 38, fontStyle: 'bold' },
+      },
+      alternateRowStyles: { fillColor: [238, 242, 255] },
+      didParseCell(data) {
+        if (data.section === 'body' && data.column.index === 4) {
+          const raw = String(data.cell.raw).replace(/[$.,\s]/g, '').replace('-', '')
+          const val = parseFloat(String(data.cell.raw).replace(/[$.\s]/g, '').replace(',', '.'))
+          if (Math.abs(val) >= 1) data.cell.styles.textColor = val > 0 ? [185, 28, 28] : [21, 128, 61]
+          else data.cell.styles.textColor = [21, 128, 61]
+        }
+        // Fila Total IVA en destaque
+        if (data.section === 'body' && data.row.index === 4) {
+          data.cell.styles.fillColor = [224, 231, 255]
+          data.cell.styles.fontStyle = 'bold'
+        }
+      },
+      margin: { left: 10, right: 10 },
+    })
+  }
 
   // ── PIE ──────────────────────────────────────────────────────────────────────
   const pages = doc.getNumberOfPages()
