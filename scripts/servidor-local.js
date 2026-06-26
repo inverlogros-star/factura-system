@@ -156,17 +156,18 @@ async function importarRecibos(fechaInicio, fechaFin) {
     const p = r.productos
     // ── Totales del recibo desde campos de ENCABEZADO (Ent_*) ─────────────────
     // Usar siempre los valores autorizados del encabezado, no sumas de líneas
+    // TOTALES: usar ENCABEZADO (Ent_*) — los productos tienen IVA=0 por diseño del sistema
     r.totales = {
-      bruto:        r.entBruto       || Math.round(p.reduce((s, x) => s + (x.totalBruto||0), 0)),
-      descuentos:   r.entDescuentos  || Math.round(p.reduce((s, x) => s + (x.descuento||0), 0)),
+      bruto:        r.entBruto       > 0 ? r.entBruto       : Math.round(p.reduce((s, x) => s + (x.totalBruto||0), 0)),
+      descuentos:   r.entDescuentos  > 0 ? r.entDescuentos  : Math.round(p.reduce((s, x) => s + (x.descuento||0), 0)),
       subtotalNeto: r.entBruto - r.entDescuentos > 0
                       ? r.entBruto - r.entDescuentos
                       : Math.round(p.reduce((s, x) => s + x.subtotal, 0)),
-      iva:          r.entIva         || Math.round(p.reduce((s, x) => s + (x.iva||0), 0)),
-      iconsumo:     r.entIconsumo    || Math.round(p.reduce((s, x) => s + (x.iconsumo||0), 0)),
+      iva:          r.entIva         > 0 ? r.entIva         : Math.round(p.reduce((s, x) => s + (x.iva||0), 0)),
+      iconsumo:     r.entIconsumo    > 0 ? r.entIconsumo    : Math.round(p.reduce((s, x) => s + (x.iconsumo||0), 0)),
       ibua:         Math.round(p.reduce((s, x) => s + (x.ibua||0), 0)),
       icui:         Math.round(p.reduce((s, x) => s + (x.icui||0), 0)),
-      estampillas:  r.entEstampillas || Math.round(p.reduce((s, x) => s + (x.estampillas||0), 0)),
+      estampillas:  r.entEstampillas > 0 ? r.entEstampillas : Math.round(p.reduce((s, x) => s + (x.estampillas||0), 0)),
       neto:         0,
     }
     // Ent_Neto = total definitivo a pagar (campo más confiable del encabezado)

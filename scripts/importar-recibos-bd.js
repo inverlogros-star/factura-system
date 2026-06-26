@@ -140,21 +140,24 @@ function construirRecibos(filas) {
     }
   }
 
-  // Completar totales desde encabezado y calcular resumen de impuestos
+  // Completar totales — SIEMPRE usar campos del ENCABEZADO (Ent_*) que son los valores reales
+  // Los productos tienen EntDet_Iva=0 siempre; el IVA real está en Ent_Iva del encabezado
   for (const recibo of mapa.values()) {
-    if (recibo.total === 0) recibo.total = recibo.totalEncabezado.neto || recibo.totalEncabezado.total
-
-    // Calcular totales de impuestos sumando las líneas de productos
+    const enc = recibo.totalEncabezado
     const prods = recibo.productos
+
+    if (recibo.total === 0) recibo.total = enc.neto || enc.total
+
     recibo.totales = {
-      bruto:        prods.reduce((s, p) => s + (p.totalBruto || 0), 0),
-      descuentos:   prods.reduce((s, p) => s + (p.descuento  || 0), 0),
-      subtotalNeto: prods.reduce((s, p) => s + p.subtotal, 0),
-      iva:          prods.reduce((s, p) => s + (p.iva || 0), 0),
-      iconsumo:     prods.reduce((s, p) => s + (p.iconsumo || 0), 0),
-      ibua:         prods.reduce((s, p) => s + (p.ibua || 0), 0),
-      icui:         prods.reduce((s, p) => s + (p.icui || 0), 0),
-      estampillas:  prods.reduce((s, p) => s + (p.estampillas || 0), 0),
+      bruto:        enc.bruto       > 0 ? enc.bruto       : Math.round(prods.reduce((s, p) => s + (p.totalBruto||0), 0)),
+      descuentos:   enc.descuentos  > 0 ? enc.descuentos  : Math.round(prods.reduce((s, p) => s + (p.descuento||0), 0)),
+      subtotalNeto: enc.bruto - enc.descuentos > 0 ? enc.bruto - enc.descuentos : Math.round(prods.reduce((s, p) => s + p.subtotal, 0)),
+      // IVA: SIEMPRE del encabezado Ent_Iva — los productos no tienen IVA por línea
+      iva:          enc.iva         > 0 ? enc.iva         : Math.round(prods.reduce((s, p) => s + (p.iva||0), 0)),
+      iconsumo:     enc.iconsumo    > 0 ? enc.iconsumo    : Math.round(prods.reduce((s, p) => s + (p.iconsumo||0), 0)),
+      ibua:         Math.round(prods.reduce((s, p) => s + (p.ibua||0), 0)),
+      icui:         Math.round(prods.reduce((s, p) => s + (p.icui||0), 0)),
+      estampillas:  enc.estampillas > 0 ? enc.estampillas : Math.round(prods.reduce((s, p) => s + (p.estampillas||0), 0)),
       neto:         recibo.total,
     }
   }
