@@ -28,11 +28,32 @@ export default function DetalleRecibo({ recibo, onClose }: { recibo: ReciboMerca
     timeZone: 'America/Bogota'
   })
 
-  // Determinar tasas IVA presentes
-  const tasas5  = recibo.productos.filter(p => (p as any).tasaIva === 5)
-  const tasas19 = recibo.productos.filter(p => (p as any).tasaIva === 19)
-  const ivaTotal5  = tasas5.reduce((s, p)  => s + ((p as any).iva || 0), 0)
-  const ivaTotal19 = tasas19.reduce((s, p) => s + ((p as any).iva || 0), 0)
+  // Agrupar IVA por tasa desde productos (EntDet_Iva = tasa %, TotalVrIva = valor)
+  const prods = recibo.productos as any[]
+  const tasas5    = prods.filter(p => Number(p.tasaIva) === 5)
+  const tasas19   = prods.filter(p => Number(p.tasaIva) === 19)
+  // Valor IVA: usar TotalVrIva (p.iva) si > 0, si no calcular desde base
+  const ivaTotal5  = tasas5.reduce((s, p)  => s + (Number(p.iva) > 0 ? Number(p.iva) : Number(p.baseIva || 0) * 0.05), 0)
+  const ivaTotal19 = tasas19.reduce((s, p) => s + (Number(p.iva) > 0 ? Number(p.iva) : Number(p.baseIva || 0) * 0.19), 0)
+  // Si no hay desglose por tasa, usar header total
+  const ivaHeaderTotal = Math.round(t?.iva ?? 0)
+  const ivaTotal5Final  = Math.round(ivaTotal5)
+  const ivaTotal19Final = Math.round(ivaTotal19)
+  // Si la suma de 5%+19% no cuadra con header, repartir proporcional
+  const ivaLineasTotal = ivaTotal5Final + ivaTotal19Final
+  const ivaFinal5  = ivaHeaderTotal > 0 && ivaLineasTotal === 0
+    ? Math.round(ivaHeaderTotal * (tasas5.length  / (prods.length || 1)))
+    : ivaTotal5Final
+  const ivaFinal19 = ivaHeaderTotal > 0 && ivaLineasTotal === 0
+    ? ivaHeaderTotal - ivaFinal5
+    : ivaTotal19Final
+  // Totales de impuestos
+  const totalIbua = Math.round(t?.ibua ?? prods.reduce((s, p) => s + (Number(p.ibua) || 0), 0))
+  const totalIcui = Math.round(t?.icui ?? prods.reduce((s, p) => s + (Number(p.icui) || 0), 0))
+  const totalIconsumo = Math.round(t?.iconsumo ?? prods.reduce((s, p) => s + (Number(p.iconsumo) || 0), 0))
+  const totalDescuentos = Math.round(t?.descuentos ?? prods.reduce((s, p) => s + (Number(p.descuento) || 0), 0))
+  const totalBruto = Math.round(t?.bruto ?? prods.reduce((s, p) => s + (Number(p.totalBruto) || 0), 0))
+  const subtotalNeto = Math.round(t?.subtotalNeto ?? (totalBruto - totalDescuentos))
 
   function imprimir() {
     const ventana = window.open('', '_blank', 'width=1000,height=700')
@@ -192,45 +213,34 @@ export default function DetalleRecibo({ recibo, onClose }: { recibo: ReciboMerca
             <table className="w-full text-xs">
               <thead className="bg-gray-100">
                 <tr>
-                  {['Código', 'Descripción', 'Cant. Ped.', 'Cant. Rec.', 'P.Bruto', 'Descuento', 'Base IVA', '%IVA', 'IVA', 'Impocons.', 'IBUA', 'ICUI', 'Total Neto'].map(h => (
-                    <th key={h} className="text-left px-3 py-2.5 font-semibold text-gray-700 border-b whitespace-nowrap">{h}</th>
+                  {['Código', 'Descripción', 'C.Ped', 'C.Rec', 'SubTotal Bruto', 'Desc.', '%IVA', 'IVA', 'IBUA', 'ICUI', 'Total Neto'].map(h => (
+                    <th key={h} className="text-left px-2 py-2.5 font-semibold text-gray-700 border-b whitespace-nowrap text-xs">{h}</th>
                   ))}
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
                 {recibo.productos.map((p: any, i: number) => (
                   <tr key={i} className={i % 2 === 0 ? 'bg-white hover:bg-green-50' : 'bg-gray-50 hover:bg-green-50'}>
-                    <td className="px-3 py-2 font-mono text-gray-600 whitespace-nowrap">{p.codigo || '—'}</td>
-                    <td className="px-3 py-2 font-medium min-w-[180px]">{p.descripcion}</td>
-                    <td className="px-3 py-2 text-right whitespace-nowrap text-gray-400">
-                      {(p as any).cantidadPedida > 0 ? (p as any).cantidadPedida : '—'}
-                    </td>
-                    <td className="px-3 py-2 text-right whitespace-nowrap font-bold text-green-700">{p.cantidad}</td>
-                    <td className="px-3 py-2 text-right whitespace-nowrap">
-                      ${fmt((p as any).totalBruto ?? p.cantidad * ((p as any).costoBruto ?? 0))}
-                    </td>
-                    <td className="px-3 py-2 text-right whitespace-nowrap text-orange-600">
-                      {((p as any).descuento ?? 0) > 0 ? `-$${fmt((p as any).descuento)}` : '—'}
-                    </td>
-                    <td className="px-3 py-2 text-right whitespace-nowrap font-medium">
-                      ${fmt((p as any).baseIva ?? ((p as any).totalBruto - ((p as any).descuento || 0)))}
-                    </td>
-                    <td className="px-3 py-2 text-right whitespace-nowrap text-gray-500">
-                      {p.tasaIva > 0 ? `${p.tasaIva}%` : '—'}
-                    </td>
-                    <td className="px-3 py-2 text-right whitespace-nowrap text-purple-600">
-                      {fmtN(p.iva) ? `$${fmt(p.iva)}` : '—'}
-                    </td>
-                    <td className="px-3 py-2 text-right whitespace-nowrap text-blue-600">
-                      {fmtN(p.iconsumo) ? `$${fmt(p.iconsumo)}` : '—'}
-                    </td>
-                    <td className="px-3 py-2 text-right whitespace-nowrap text-blue-600">
-                      {fmtN(p.ibua) ? `$${fmt(p.ibua)}` : '—'}
-                    </td>
-                    <td className="px-3 py-2 text-right whitespace-nowrap text-blue-600">
-                      {fmtN(p.icui) ? `$${fmt(p.icui)}` : '—'}
-                    </td>
-                    <td className="px-3 py-2 text-right font-bold text-green-700 whitespace-nowrap">${fmt(p.subtotal)}</td>
+                    <td className="px-2 py-2 font-mono text-gray-600 whitespace-nowrap text-xs">{p.codigo || '—'}</td>
+                    <td className="px-2 py-2 font-medium min-w-[160px] text-xs">{p.descripcion}</td>
+                    {/* Cant. Pedida (EntDet_CanPed) */}
+                    <td className="px-2 py-2 text-right text-gray-400 text-xs">{p.cantidadPedida > 0 ? p.cantidadPedida : '—'}</td>
+                    {/* Cant. Recibida (EntDet_CanRec) */}
+                    <td className="px-2 py-2 text-right font-bold text-green-700 text-xs">{p.cantidad}</td>
+                    {/* SubTotal Bruto (EntDet_TotalBruto) */}
+                    <td className="px-2 py-2 text-right text-xs">${fmt(Number(p.totalBruto) || p.cantidad * (Number(p.costoBruto) || 0))}</td>
+                    {/* Descuento */}
+                    <td className="px-2 py-2 text-right text-orange-600 text-xs">{Number(p.descuento) > 0 ? `-$${fmt(p.descuento)}` : '—'}</td>
+                    {/* %IVA (EntDet_Iva = tasa) */}
+                    <td className="px-2 py-2 text-right font-bold text-purple-700 text-xs">{Number(p.tasaIva) > 0 ? `${p.tasaIva}%` : '0%'}</td>
+                    {/* IVA valor (TotalVrIva) */}
+                    <td className="px-2 py-2 text-right text-purple-600 text-xs">{Number(p.iva) > 0 ? `$${fmt(p.iva)}` : '—'}</td>
+                    {/* IBUA (TotalVrIBUA) */}
+                    <td className="px-2 py-2 text-right text-blue-600 text-xs">{Number(p.ibua) > 0 ? `$${fmt(p.ibua)}` : '—'}</td>
+                    {/* ICUI (TotalVrICUI) */}
+                    <td className="px-2 py-2 text-right text-blue-600 text-xs">{Number(p.icui) > 0 ? `$${fmt(p.icui)}` : '—'}</td>
+                    {/* Total Neto (EntDet_TotalNeto) */}
+                    <td className="px-2 py-2 text-right font-bold text-green-700 text-xs">${fmt(p.subtotal)}</td>
                   </tr>
                 ))}
               </tbody>
@@ -244,67 +254,89 @@ export default function DetalleRecibo({ recibo, onClose }: { recibo: ReciboMerca
           </div>
         </div>
 
-        {/* Resumen de impuestos y total */}
+        {/* Resumen de liquidación por renglones separados */}
         <div className="flex justify-end">
-          <div className="bg-white rounded-lg border overflow-hidden w-full max-w-md">
-            <div className="px-5 py-3 bg-gray-50 border-b">
-              <h3 className="font-semibold text-gray-700 text-sm">Resumen Liquidación</h3>
+          <div className="bg-white rounded-lg border overflow-hidden w-full max-w-lg">
+            <div className="px-5 py-2.5 bg-gray-50 border-b">
+              <h3 className="font-semibold text-gray-700 text-sm">Liquidación del Recibo</h3>
             </div>
             <table className="w-full text-sm">
               <tbody className="divide-y divide-gray-100">
+                {/* Subtotal Bruto */}
                 <tr>
-                  <td className="px-5 py-2.5 text-gray-600">Subtotal bruto</td>
-                  <td className="px-5 py-2.5 text-right font-medium">${fmt(t?.bruto ?? 0)}</td>
+                  <td className="px-5 py-2 text-gray-600 text-xs font-semibold uppercase tracking-wide">SubTotal Bruto</td>
+                  <td className="px-5 py-2 text-right font-bold">${fmt(totalBruto)}</td>
                 </tr>
-                {(t?.descuentos ?? 0) > 0 && (
+                {/* Descuentos */}
+                {totalDescuentos > 0 && (
                   <tr>
-                    <td className="px-5 py-2.5 text-orange-600">(-) Descuentos proveedores</td>
-                    <td className="px-5 py-2.5 text-right font-medium text-orange-600">-${fmt(t?.descuentos)}</td>
+                    <td className="px-5 py-2 text-orange-600">(-) Descuentos proveedores</td>
+                    <td className="px-5 py-2 text-right font-medium text-orange-600">-${fmt(totalDescuentos)}</td>
                   </tr>
                 )}
+                {/* Subtotal Neto */}
                 <tr className="bg-gray-50">
-                  <td className="px-5 py-2.5 font-semibold text-gray-700">Subtotal neto</td>
-                  <td className="px-5 py-2.5 text-right font-semibold">${fmt(t?.subtotalNeto ?? 0)}</td>
+                  <td className="px-5 py-2 font-semibold text-gray-700">SubTotal Neto</td>
+                  <td className="px-5 py-2 text-right font-semibold">${fmt(subtotalNeto)}</td>
                 </tr>
-                {ivaTotal5 > 0 && (
+                {/* IVA 5% - renglón separado */}
+                {(ivaFinal5 > 0 || tasas5.length > 0) && (
                   <tr>
-                    <td className="px-5 py-2.5 text-purple-600">IVA 5%</td>
-                    <td className="px-5 py-2.5 text-right font-medium text-purple-600">${fmt(ivaTotal5)}</td>
+                    <td className="px-5 py-2 text-purple-700 font-medium">
+                      IVA 5%
+                      {tasas5.length > 0 && <span className="text-xs text-gray-400 ml-2">({tasas5.length} producto(s))</span>}
+                    </td>
+                    <td className="px-5 py-2 text-right font-bold text-purple-700">${fmt(ivaFinal5)}</td>
                   </tr>
                 )}
-                {ivaTotal19 > 0 && (
+                {/* IVA 19% - renglón separado */}
+                {(ivaFinal19 > 0 || tasas19.length > 0) && (
                   <tr>
-                    <td className="px-5 py-2.5 text-purple-600">IVA 19%</td>
-                    <td className="px-5 py-2.5 text-right font-medium text-purple-600">${fmt(ivaTotal19)}</td>
+                    <td className="px-5 py-2 text-purple-700 font-medium">
+                      IVA 19%
+                      {tasas19.length > 0 && <span className="text-xs text-gray-400 ml-2">({tasas19.length} producto(s))</span>}
+                    </td>
+                    <td className="px-5 py-2 text-right font-bold text-purple-700">${fmt(ivaFinal19)}</td>
                   </tr>
                 )}
-                {(t?.iconsumo ?? 0) > 0 && (
+                {/* Si hay IVA total pero sin desglose por tasa */}
+                {ivaHeaderTotal > 0 && ivaFinal5 === 0 && ivaFinal19 === 0 && (
                   <tr>
-                    <td className="px-5 py-2.5 text-blue-600">Impoconsumo</td>
-                    <td className="px-5 py-2.5 text-right font-medium text-blue-600">${fmt(t?.iconsumo)}</td>
+                    <td className="px-5 py-2 text-purple-700 font-medium">IVA Total</td>
+                    <td className="px-5 py-2 text-right font-bold text-purple-700">${fmt(ivaHeaderTotal)}</td>
                   </tr>
                 )}
-                {(t?.ibua ?? 0) > 0 && (
+                {/* Impoconsumo */}
+                {totalIconsumo > 0 && (
                   <tr>
-                    <td className="px-5 py-2.5 text-blue-600">IBUA</td>
-                    <td className="px-5 py-2.5 text-right font-medium text-blue-600">${fmt(t?.ibua)}</td>
+                    <td className="px-5 py-2 text-blue-600">Impoconsumo</td>
+                    <td className="px-5 py-2 text-right font-medium text-blue-600">${fmt(totalIconsumo)}</td>
                   </tr>
                 )}
-                {(t?.icui ?? 0) > 0 && (
+                {/* IBUA - renglón separado */}
+                {totalIbua > 0 && (
                   <tr>
-                    <td className="px-5 py-2.5 text-blue-600">ICUI</td>
-                    <td className="px-5 py-2.5 text-right font-medium text-blue-600">${fmt(t?.icui)}</td>
+                    <td className="px-5 py-2 text-blue-600">IBUA</td>
+                    <td className="px-5 py-2 text-right font-medium text-blue-600">${fmt(totalIbua)}</td>
                   </tr>
                 )}
+                {/* ICUI - renglón separado */}
+                {totalIcui > 0 && (
+                  <tr>
+                    <td className="px-5 py-2 text-blue-600">ICUI</td>
+                    <td className="px-5 py-2 text-right font-medium text-blue-600">${fmt(totalIcui)}</td>
+                  </tr>
+                )}
+                {/* Estampillas */}
                 {(t?.estampillas ?? 0) > 0 && (
                   <tr>
-                    <td className="px-5 py-2.5 text-blue-600">Estampillas</td>
-                    <td className="px-5 py-2.5 text-right font-medium text-blue-600">${fmt(t?.estampillas)}</td>
+                    <td className="px-5 py-2 text-blue-600">Estampillas</td>
+                    <td className="px-5 py-2 text-right font-medium text-blue-600">${fmt(t?.estampillas)}</td>
                   </tr>
                 )}
               </tbody>
               <tfoot>
-                <tr className="bg-green-600 text-white">
+                <tr className="bg-green-700 text-white">
                   <td className="px-5 py-3 font-bold text-base">TOTAL A PAGAR</td>
                   <td className="px-5 py-3 text-right font-bold text-2xl">${fmt(recibo.total)}</td>
                 </tr>
