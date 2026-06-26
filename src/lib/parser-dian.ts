@@ -203,9 +203,28 @@ function extraerLineas(root: any): ProductoFactura[] {
       impuesto += n(get(tt, 'TaxAmount', 'cbc:TaxAmount'))
       const subtaxes = getArr(tt, 'TaxSubtotal', 'cac:TaxSubtotal')
       for (const st of subtaxes) {
-        const tasa = n(get(st, 'Percent', 'cbc:Percent'))
+        // Buscar la tasa en Percent, TaxPercent o calcularla del valor
+        const tasa = n(get(st, 'Percent', 'cbc:Percent')) ||
+                     n(get(st, 'TaxPercent', 'cbc:TaxPercent'))
         if (tasa > 0) tasaIva = tasa
+        // Si no hay tasa explícita, calcularla desde los valores
+        if (tasaIva === 0) {
+          const baseAmt = n(get(st, 'TaxableAmount', 'cbc:TaxableAmount'))
+          const taxAmt  = n(get(st, 'TaxAmount',     'cbc:TaxAmount'))
+          if (baseAmt > 0 && taxAmt > 0) {
+            const calculada = Math.round((taxAmt / baseAmt) * 100)
+            if (calculada >= 4 && calculada <= 6)  tasaIva = 5
+            else if (calculada >= 17 && calculada <= 21) tasaIva = 19
+          }
+        }
       }
+    }
+
+    // Si después del XML la tasa sigue en 0 pero hay IVA, calcularla desde subtotal
+    if (tasaIva === 0 && impuesto > 0 && subtotal > 0) {
+      const calculada = Math.round((impuesto / subtotal) * 100)
+      if (calculada >= 4 && calculada <= 6)  tasaIva = 5
+      else if (calculada >= 17 && calculada <= 21) tasaIva = 19
     }
 
     // Impoconsumo / otros impuestos

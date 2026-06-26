@@ -224,7 +224,18 @@ export default function DetalleFactura({ factura, onClose }: { factura: Factura;
                     <td className="px-4 py-2.5 text-right whitespace-nowrap">${fmt(p.precioUnitario)}</td>
                     <td className="px-4 py-2.5 text-right whitespace-nowrap text-orange-600">{p.descuento > 0 ? `-$${fmt(p.descuento)}` : '—'}</td>
                     <td className="px-4 py-2.5 text-right whitespace-nowrap">${fmt(p.subtotal)}</td>
-                    <td className="px-4 py-2.5 text-right whitespace-nowrap text-gray-500">{(p as any).tasaIva !== undefined ? `${(p as any).tasaIva}%` : '—'}</td>
+                    <td className="px-4 py-2.5 text-right whitespace-nowrap font-bold text-purple-700">
+                      {(() => {
+                        let tasa = (p as any).tasaIva ?? 0
+                        // Si la tasa viene 0 pero hay IVA, calcularla
+                        if (tasa === 0 && p.impuesto > 0 && p.subtotal > 0) {
+                          const c = Math.round((p.impuesto / p.subtotal) * 100)
+                          if (c >= 4 && c <= 6) tasa = 5
+                          else if (c >= 17 && c <= 21) tasa = 19
+                        }
+                        return tasa > 0 ? `${tasa}%` : '0%'
+                      })()}
+                    </td>
                     <td className="px-4 py-2.5 text-right whitespace-nowrap text-purple-600">${fmt(p.impuesto)}</td>
                     <td className="px-4 py-2.5 text-right font-bold text-blue-700 whitespace-nowrap">${fmt(p.total)}</td>
                   </tr>
@@ -247,7 +258,13 @@ export default function DetalleFactura({ factura, onClose }: { factura: Factura;
         {(() => {
           const grupos: Record<number, { base: number; iva: number }> = {}
           for (const p of factura.productos) {
-            const tasa = (p as any).tasaIva ?? 0
+            let tasa = (p as any).tasaIva ?? 0
+            // Calcular tasa si es 0 pero hay IVA
+            if (tasa === 0 && p.impuesto > 0 && p.subtotal > 0) {
+              const c = Math.round((p.impuesto / p.subtotal) * 100)
+              if (c >= 4 && c <= 6) tasa = 5
+              else if (c >= 17 && c <= 21) tasa = 19
+            }
             if (!grupos[tasa]) grupos[tasa] = { base: 0, iva: 0 }
             grupos[tasa].base += p.subtotal
             grupos[tasa].iva  += p.impuesto
