@@ -134,20 +134,16 @@ function PanelDiferencias({ resultado, factura, recibo, onClose, onEliminar }: {
             icuiFact     += (p as any).icui     || 0
           }
 
-          // Impuestos del RECIBO — sumar siempre desde los productos (más confiable)
+          // Impuestos del RECIBO — prioridad: totales del encabezado (Ent_Iva) > suma productos
+          const t    = recibo?.totales
           const prods = recibo?.productos ?? []
-          const sumaIvaRec      = Math.round(prods.reduce((s: number, p: any) => s + (Number(p.iva)      || 0), 0))
-          const sumaIconsumoRec = Math.round(prods.reduce((s: number, p: any) => s + (Number(p.iconsumo) || 0), 0))
-          const sumaIbuaRec     = Math.round(prods.reduce((s: number, p: any) => s + (Number(p.ibua)     || 0), 0))
-          const sumaIcuiRec     = Math.round(prods.reduce((s: number, p: any) => s + (Number(p.icui)     || 0), 0))
-          // Si la suma da 0 pero hay totales en el header, usar esos
-          const t = recibo?.totales
-          const ivaRec      = sumaIvaRec      > 0 ? sumaIvaRec      : Math.round(t?.iva      ?? 0)
-          const iconsumoRec = sumaIconsumoRec > 0 ? sumaIconsumoRec : Math.round(t?.iconsumo ?? 0)
-          const ibuaRec     = sumaIbuaRec     > 0 ? sumaIbuaRec     : Math.round(t?.ibua     ?? 0)
-          const icuiRec     = sumaIcuiRec     > 0 ? sumaIcuiRec     : Math.round(t?.icui     ?? 0)
+          // SIEMPRE usar totales del header — son los valores reales de la BD
+          const ivaRec      = Math.round(t?.iva      ?? prods.reduce((s: number, p: any) => s + (Number(p.iva)      || 0), 0))
+          const iconsumoRec = Math.round(t?.iconsumo ?? prods.reduce((s: number, p: any) => s + (Number(p.iconsumo) || 0), 0))
+          const ibuaRec     = Math.round(t?.ibua     ?? prods.reduce((s: number, p: any) => s + (Number(p.ibua)     || 0), 0))
+          const icuiRec     = Math.round(t?.icui     ?? prods.reduce((s: number, p: any) => s + (Number(p.icui)     || 0), 0))
           const totalReciboReal = Math.round(t?.neto ?? Number(resultado.valorTotalRecibo))
-          const necesitaReimportar = ivaRec === 0 && prods.length > 0
+          const necesitaReimportar = ivaRec === 0 && prods.length > 0 && !recibo
           const totalIvaFact  = Math.round(impFact5 + impFact19)
           const totalIvaRec   = ivaRec
           const difIva        = totalIvaFact - totalIvaRec
@@ -268,8 +264,16 @@ export default function ComparacionPage() {
     const [fs, rs, cs] = await Promise.all([storeFacturas.getAll(), storeRecibos.getAll(), storeComparaciones.getAll()])
     setFacturas(fs); setRecibos(rs); setResultados(cs)
     setFacturasMap(Object.fromEntries(fs.map(f => [f.id, f])))
+    return rs  // devolver recibos para uso inmediato
   }
   useEffect(() => { recargar() }, [])
+
+  // Recargar recibos frescos antes de abrir el panel
+  const abrirPanel = async (resultado: ResultadoComparacion) => {
+    const recibosActualizados = await storeRecibos.getAll()
+    setRecibos(recibosActualizados)
+    setPanelAbierto(resultado)
+  }
 
   function toggleFactura(id: string) {
     setSeleccionadas(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n })
@@ -559,7 +563,7 @@ export default function ComparacionPage() {
                         {/* Acción */}
                         <td className="px-2 py-2" onClick={e => e.stopPropagation()}>
                           {resultado && (
-                            <button onClick={() => setPanelAbierto(resultado)}
+                            <button onClick={() => abrirPanel(resultado)}
                               className="p-1 rounded hover:bg-blue-100 text-blue-600 transition-colors">
                               <Eye size={14} />
                             </button>
