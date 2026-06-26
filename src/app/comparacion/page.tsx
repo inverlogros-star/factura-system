@@ -14,9 +14,6 @@ import { toast } from 'sonner'
 function fmt(n: number) {
   return Number(n || 0).toLocaleString('es-CO', { minimumFractionDigits: 0, maximumFractionDigits: 0 })
 }
-function fmtNum(n: number) {
-  return `$${Number(n || 0).toLocaleString('es-CO', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`
-}
 
 const TIPO_LABEL: Record<TipoDiferencia, string> = {
   cantidad: 'Cantidad', precio: 'Precio',
@@ -363,63 +360,28 @@ export default function ComparacionPage() {
   }
 
   // Filtrar y separar facturas con/sin recibo
-  // ── Lógica principal: partir de los RECIBOS del rango de fechas ──────────────
-  // Para cada recibo del rango, buscar su factura asociada
-  const recibosDelRango = useMemo(() => {
-    if (!fechaDesde && !fechaHasta) return recibos
-    return recibos.filter(r => {
-      const fr = (r.fecha || '').slice(0, 10)
-      if (fechaDesde && fr < fechaDesde) return false
-      if (fechaHasta && fr > fechaHasta) return false
-      return true
-    })
-  }, [recibos, fechaDesde, fechaHasta])
-
-  // Construir pares recibo → factura para mostrar en la tabla
-  const paresReciboFactura = useMemo(() => {
-    const q = busqueda.trim().toLowerCase()
-    return recibosDelRango
-      .filter(r => {
-        if (!q) return true
-        const nitNorm = (r.nitProveedor || '').replace(/[.\-\s]/g, '')
-        const qNorm = q.replace(/[.\-\s]/g, '')
-        return r.numeroRecibo.toLowerCase().includes(q) ||
-          (r.proveedor || '').toLowerCase().includes(q) ||
-          nitNorm.includes(qNorm) ||
-          (r.numeroFacturaProveedor || '').includes(q)
-      })
-      .map(r => {
-        // Buscar factura que corresponde a este recibo
-        const factura = facturas.find(f => {
-          if (f.tipoDocumento === 'nota_credito' || f.tipoDocumento === 'nota_debito') return false
-          // Coincidir por últimos dígitos del No. Factura
-          const digitos = (f.numeroFactura || '').replace(/\D/g, '').slice(-4)
-          if (r.numeroFacturaProveedor && digitos && r.numeroFacturaProveedor === digitos) return true
-          // Coincidir por NIT
-          const nitF = (f.nitProveedor || '').replace(/[.\-\s]/g, '').slice(0, 9)
-          const nitR = (r.nitProveedor || '').replace(/[.\-\s]/g, '').slice(0, 9)
-          if (nitF.length >= 6 && nitR.length >= 6 && nitF.slice(0, 8) === nitR.slice(0, 8)) {
-            // mismo proveedor — verificar que haya resultado de comparación
-            const res = resultados.find(c => c.reciboId === r.id && c.facturaId === f.id)
-            if (res) return true
-          }
-          return false
-        })
-        return { recibo: r, factura }
-      })
-  }, [recibosDelRango, facturas, resultados, busqueda])
-
-  // Para retrocompatibilidad con el resto del código que usa facturasFiltradas
   const facturasFiltradas = useMemo(() => {
-    if (!fechaDesde && !fechaHasta && !busqueda) {
-      return facturas.filter(f =>
-        f.tipoDocumento !== 'nota_credito' && f.tipoDocumento !== 'nota_debito'
-      )
-    }
-    return paresReciboFactura
-      .filter(p => p.factura)
-      .map(p => p.factura!)
-  }, [facturas, paresReciboFactura, fechaDesde, fechaHasta, busqueda])
+    const q = busqueda.trim().toLowerCase()
+    return facturas.filter(f => {
+      if (f.tipoDocumento === 'nota_credito' || f.tipoDocumento === 'nota_debito') return false
+
+      // Filtrar por fecha del RECIBO DE MERCANCÍA (no de la factura)
+      if (fechaDesde || fechaHasta) {
+        const recibo = encontrarReciboPorFactura(f, recibos)
+        const fechaRecibo = recibo?.fecha || ''
+        if (!fechaRecibo) return false   // sin recibo = no aplica en el rango
+        if (fechaDesde && fechaRecibo < fechaDesde) return false
+        if (fechaHasta && fechaRecibo > fechaHasta) return false
+      }
+
+      if (!q) return true
+      const nitNorm = (f.nitProveedor || '').replace(/[.\-\s]/g, '')
+      const qNorm = q.replace(/[.\-\s]/g, '')
+      return f.numeroFactura.toLowerCase().includes(q) ||
+        (f.proveedor || '').toLowerCase().includes(q) ||
+        nitNorm.includes(qNorm)
+    })
+  }, [facturas, recibos, busqueda, fechaDesde, fechaHasta])
 
   const conRecibo    = facturasFiltradas.filter(f => encontrarReciboPorFactura(f, recibos))
   const sinRecibo    = facturasFiltradas.filter(f => !encontrarReciboPorFactura(f, recibos))
@@ -538,9 +500,7 @@ export default function ComparacionPage() {
         <CardHeader className="pb-2">
           <div className="flex items-center justify-between">
             <CardTitle className="text-sm">
-              {(fechaDesde || fechaHasta)
-                ? `${recibosDelRango.length} recibo(s) del ${fechaDesde || '…'} al ${fechaHasta || '…'}`
-                : `${facturasFiltradas.length} factura(s)`}
+              {facturasFiltradas.length} factura(s) — {fechaDesde || '…'} al {fechaHasta || '…'}
             </CardTitle>
             <p className="text-xs text-gray-400 flex items-center gap-1">
               <CheckSquare size={11} className="text-blue-500" /> Marca pendientes y compara
@@ -579,31 +539,8 @@ export default function ComparacionPage() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100">
-                  {/* Cuando hay filtro de fechas → usar pares recibo-factura (recibos como entidad base) */}
-                  {/* Sin filtro → usar facturas como entidad base */}
-                  {((fechaDesde || fechaHasta) ? paresReciboFactura : facturasFiltradas.map(f => ({ recibo: encontrarReciboPorFactura(f, recibos), factura: f }))).map((item: any) => {
-                    const f = item.factura
-                    const recibo = item.recibo
-                    if (!f && !recibo) return null
-                    // Si solo hay recibo (sin factura aún)
-                    if (!f) {
-                      return (
-                        <tr key={recibo.id} className="bg-yellow-50 hover:bg-yellow-100">
-                          <td className="px-3 py-2"></td>
-                          <td className="px-2 py-2 text-xs text-gray-400 italic">Sin factura DIAN</td>
-                          <td className="px-2 py-2"><span className="text-xs text-gray-400">—</span></td>
-                          <td className="px-2 py-2 text-xs truncate max-w-[140px]" title={recibo.proveedor}>{recibo.proveedor || '—'}</td>
-                          <td className="px-2 py-2 text-xs text-gray-500">{recibo.fecha}</td>
-                          <td className="px-2 py-2 text-xs text-gray-400">—</td>
-                          <td className="px-2 py-2"><span className="text-xs bg-yellow-100 text-yellow-700 px-1.5 rounded">sin factura</span></td>
-                          <td className="px-2 py-2 text-xs text-green-700">{fmtNum(recibo.total)}</td>
-                          <td className="px-2 py-2 text-xs">{fmtRecibo(recibo.numeroRecibo)}{recibo.numeroFacturaProveedor && <span className="ml-1 bg-green-100 text-green-700 font-mono px-1 rounded text-xs">{recibo.numeroFacturaProveedor}</span>}</td>
-                          <td className="px-2 py-2"></td>
-                          <td className="px-2 py-2"></td>
-                          <td className="px-2 py-2"></td>
-                        </tr>
-                      )
-                    }
+                  {facturasFiltradas.map(f => {
+                    const recibo    = encontrarReciboPorFactura(f, recibos)
                     const checked   = seleccionadas.has(f.id)
                     const resultado = resultadosPorFactura[f.id]
                     const esNCPOS   = f.tipoDocumento === 'nota_credito'
