@@ -143,6 +143,9 @@ export async function generarInformePDF(
   // Conteo por tipo de diferencia
   let cantDifCantidad = 0, cantDifPrecio = 0, cantDifPresentacion = 0, cantDifNoEncontrado = 0
 
+  // Buscar productos de la factura para obtener valores de IVA por producto
+  const prodFacturaMap = new Map(factura.productos.map(p => [p.codigo, p]))
+
   const rows = resultado.diferencias.map((d: Diferencia) => {
     const valDif = d.valorDiferenciaTotal ?? 0
     if (d.tipoDiferencia === 'cantidad') cantDifCantidad++
@@ -150,14 +153,45 @@ export async function generarInformePDF(
     else if (d.tipoDiferencia === 'presentacion') cantDifPresentacion++
     else cantDifNoEncontrado++
 
+    // Obtener IVA del producto de la factura
+    const prodF = prodFacturaMap.get(d.codigoFactura || '')
+    const cantF = d.cantidadFacturada ?? 0
+    const cantR = d.cantidadRecibida  ?? 0
+    const pF    = d.precioFactura     ?? 0
+    const pR    = d.precioRecibo      ?? 0
+
+    // Valor mercancía = cantidad × precio (sin IVA)
+    const mercF  = Math.round(cantF * pF)
+    const mercR  = Math.round(cantR * pR)
+
+    // IVA del producto factura
+    const tasaIva = (prodF as any)?.tasaIva ?? 0
+    const ivaF    = prodF
+      ? Math.round(((prodF as any).ivaValor ?? prodF.impuesto) / (prodF.cantidad || 1) * cantF)
+      : (tasaIva > 0 ? Math.round(mercF * tasaIva / 100) : 0)
+
+    // IVA del recibo: proporcional al total IVA del recibo
+    const ivaR    = ivaF  // recibo no tiene IVA por línea, usar mismo criterio
+
+    const difMerc = mercF - mercR
+    const difIva  = ivaF  - ivaR
+
     return [
       d.codigoFactura || d.codigoRecibo || '—',
       d.descripcion,
       TIPO_LABEL[d.tipoDiferencia] || d.tipoDiferencia,
-      d.cantidadRecibida !== undefined ? String(d.cantidadRecibida) : '—',
+      d.cantidadRecibida  !== undefined ? String(d.cantidadRecibida)  : '—',
       d.cantidadFacturada !== undefined ? String(d.cantidadFacturada) : '—',
-      d.precioRecibo !== undefined ? `$${fmt(d.precioRecibo)}` : '—',
-      d.precioFactura !== undefined ? `$${fmt(d.precioFactura)}` : '—',
+      // Precio unitario
+      pR > 0 ? `$${fmt(pR)}` : '—',
+      pF > 0 ? `$${fmt(pF)}` : '—',
+      // Valor mercancía separado
+      mercR > 0 ? `$${fmt(mercR)}` : '—',
+      mercF > 0 ? `$${fmt(mercF)}` : '—',
+      // IVA separado
+      ivaR > 0 ? `$${fmt(ivaR)}` : '—',
+      ivaF > 0 ? `$${fmt(ivaF)}` : '—',
+      // Diferencia total
       `$${fmt(valDif)}`,
     ]
   })
@@ -165,21 +199,29 @@ export async function generarInformePDF(
   autoTable(doc, {
     startY: y,
     head: [[
-      'Código', 'Descripción', 'Tipo', 'Cant.\nRecibida', 'Cant.\nFacturada',
-      'Precio\nRecibo', 'Precio\nFactura', 'Vlr. Diferencia',
+      'Código', 'Descripción', 'Tipo',
+      'Cant.\nRec.', 'Cant.\nFact.',
+      'P.Unit\nRecibo', 'P.Unit\nFactura',
+      'Vr.Merc\nRecibo', 'Vr.Merc\nFactura',
+      'IVA\nRecibo', 'IVA\nFactura',
+      'Vlr.\nDiferencia',
     ]],
     body: rows,
-    styles: { fontSize: 7, cellPadding: 2, overflow: 'linebreak' },
-    headStyles: { fillColor: [30, 64, 175], textColor: 255, fontStyle: 'bold', fontSize: 7.5, halign: 'center' },
+    styles: { fontSize: 6, cellPadding: 1.8, overflow: 'linebreak' },
+    headStyles: { fillColor: [30, 64, 175], textColor: 255, fontStyle: 'bold', fontSize: 6.5, halign: 'center' },
     columnStyles: {
-      0: { cellWidth: 30, font: 'courier', fontSize: 6.5 },
-      1: { cellWidth: 80 },
-      2: { cellWidth: 28, halign: 'center', fontStyle: 'bold' },
-      3: { cellWidth: 20, halign: 'right' },
-      4: { cellWidth: 20, halign: 'right' },
-      5: { cellWidth: 28, halign: 'right' },
-      6: { cellWidth: 28, halign: 'right' },
-      7: { cellWidth: 30, halign: 'right', fontStyle: 'bold' },
+      0:  { cellWidth: 22, font: 'courier', fontSize: 6 },
+      1:  { cellWidth: 55 },
+      2:  { cellWidth: 22, halign: 'center', fontStyle: 'bold' },
+      3:  { cellWidth: 14, halign: 'right' },
+      4:  { cellWidth: 14, halign: 'right' },
+      5:  { cellWidth: 20, halign: 'right' },
+      6:  { cellWidth: 20, halign: 'right' },
+      7:  { cellWidth: 22, halign: 'right' },
+      8:  { cellWidth: 22, halign: 'right', textColor: [30, 64, 175] },
+      9:  { cellWidth: 18, halign: 'right', textColor: [109, 40, 217] },
+      10: { cellWidth: 18, halign: 'right', textColor: [109, 40, 217] },
+      11: { cellWidth: 22, halign: 'right', fontStyle: 'bold' },
     },
     alternateRowStyles: { fillColor: [245, 247, 250] },
     didParseCell(data) {
@@ -190,7 +232,7 @@ export async function generarInformePDF(
         else if (tipo === 'PRESENTACIÓN') data.cell.styles.textColor = [109, 40, 217]
         else if (tipo === 'NO ENCONTRADO') data.cell.styles.textColor = [220, 38, 38]
       }
-      if (data.section === 'body' && data.column.index === 7) {
+      if (data.section === 'body' && data.column.index === 11) {
         const raw = String(data.cell.raw).replace(/[$.,\s]/g, '')
         const val = parseFloat(raw)
         if (val > 0) data.cell.styles.textColor = [185, 28, 28]
