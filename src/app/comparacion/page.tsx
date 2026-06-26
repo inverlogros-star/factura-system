@@ -364,9 +364,16 @@ export default function ComparacionPage() {
     const q = busqueda.trim().toLowerCase()
     return facturas.filter(f => {
       if (f.tipoDocumento === 'nota_credito' || f.tipoDocumento === 'nota_debito') return false
-      // Filtro por rango de fechas
-      if (fechaDesde && f.fecha && f.fecha < fechaDesde) return false
-      if (fechaHasta && f.fecha && f.fecha > fechaHasta) return false
+
+      // Filtrar por fecha del RECIBO DE MERCANCÍA (no de la factura)
+      if (fechaDesde || fechaHasta) {
+        const recibo = encontrarReciboPorFactura(f, recibos)
+        const fechaRecibo = recibo?.fecha || ''
+        if (!fechaRecibo) return false   // sin recibo = no aplica en el rango
+        if (fechaDesde && fechaRecibo < fechaDesde) return false
+        if (fechaHasta && fechaRecibo > fechaHasta) return false
+      }
+
       if (!q) return true
       const nitNorm = (f.nitProveedor || '').replace(/[.\-\s]/g, '')
       const qNorm = q.replace(/[.\-\s]/g, '')
@@ -374,7 +381,7 @@ export default function ComparacionPage() {
         (f.proveedor || '').toLowerCase().includes(q) ||
         nitNorm.includes(qNorm)
     })
-  }, [facturas, busqueda, fechaDesde, fechaHasta])
+  }, [facturas, recibos, busqueda, fechaDesde, fechaHasta])
 
   const conRecibo    = facturasFiltradas.filter(f => encontrarReciboPorFactura(f, recibos))
   const sinRecibo    = facturasFiltradas.filter(f => !encontrarReciboPorFactura(f, recibos))
@@ -416,10 +423,11 @@ export default function ComparacionPage() {
       {/* ── SELECTOR DE FECHAS — primer elemento visible ── */}
       <Card className="border-blue-200 bg-blue-50/40">
         <CardContent className="p-5">
+          <p className="text-xs text-blue-600 font-semibold mb-3">📦 Filtro por fecha del Recibo de Mercancía</p>
           <div className="flex flex-wrap gap-4 items-end">
             <div className="space-y-1.5">
               <label className="text-xs font-bold text-blue-700 flex items-center gap-1.5">
-                <CalendarIcon size={13} /> Fecha inicial
+                <CalendarIcon size={13} /> Fecha recibo inicial
               </label>
               <div className="relative">
                 <input
@@ -432,7 +440,7 @@ export default function ComparacionPage() {
             </div>
             <div className="space-y-1.5">
               <label className="text-xs font-bold text-blue-700 flex items-center gap-1.5">
-                <CalendarIcon size={13} /> Fecha final
+                <CalendarIcon size={13} /> Fecha recibo final
               </label>
               <div className="relative">
                 <input
