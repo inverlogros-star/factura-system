@@ -345,7 +345,7 @@ export default function ComparacionPage() {
             <p className="text-center text-gray-400 py-10 text-sm">No hay facturas. Ve a Facturas y sube archivos XML.</p>
           ) : (
             <div className="overflow-x-auto">
-              <table className="text-sm" style={{ tableLayout: 'fixed', minWidth: '1100px', width: '100%' }}>
+              <table className="text-sm" style={{ tableLayout: 'fixed', minWidth: '1220px', width: '100%' }}>
                 <thead className="bg-gray-50 border-b">
                   <tr>
                     <th style={{ width: 32 }} className="px-2 py-2.5">
@@ -363,7 +363,7 @@ export default function ComparacionPage() {
                       { h: 'Estado',            w: 65  },
                       { h: 'Recibo / No.Fact.', w: 170 },
                       { h: 'T. Recibo',         w: 100 },
-                      { h: 'Diferencia',        w: 90  },
+                      { h: 'T.Fact - T.Recibo', w: 110 },
                       { h: 'Res.',              w: 50  },
                       { h: '',                  w: 36  },
                     ].map(({ h, w }) => (
@@ -432,12 +432,15 @@ export default function ComparacionPage() {
                         <td className="px-2 py-2 text-xs font-semibold whitespace-nowrap">
                           {recibo ? <span className="text-green-700">${fmt(recibo.total)}</span> : <span className="text-gray-300">—</span>}
                         </td>
-                        {/* Diferencia Factura - Recibo */}
-                        <td className="px-2 py-2 text-xs font-bold whitespace-nowrap">
+                        {/* T.Factura - T.Recibo */}
+                        <td className="px-2 py-2 text-xs font-bold whitespace-nowrap text-center">
                           {recibo ? (() => {
                             const dif = Math.round(Number(f.total)) - Math.round(Number(recibo.total))
-                            if (Math.abs(dif) < 1) return <span className="text-emerald-600">$0</span>
-                            return <span className={dif > 0 ? 'text-red-600' : 'text-blue-600'}>${fmt(Math.abs(dif))}{dif < 0 ? ' ↓' : ' ↑'}</span>
+                            if (Math.abs(dif) < 1)
+                              return <span className="bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded font-bold">$0</span>
+                            if (dif > 0)
+                              return <span className="bg-red-100 text-red-700 px-2 py-0.5 rounded font-bold">+${fmt(dif)}</span>
+                            return <span className="bg-blue-100 text-blue-700 px-2 py-0.5 rounded font-bold">-${fmt(Math.abs(dif))}</span>
                           })() : <span className="text-gray-300">—</span>}
                         </td>
                         {/* Resultado */}
