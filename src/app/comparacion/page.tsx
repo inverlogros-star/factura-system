@@ -363,6 +363,7 @@ export default function ComparacionPage() {
                       { h: 'Estado',            w: 65  },
                       { h: 'Recibo / No.Fact.', w: 170 },
                       { h: 'T. Recibo',         w: 100 },
+                      { h: 'Diferencia',        w: 90  },
                       { h: 'Res.',              w: 50  },
                       { h: '',                  w: 36  },
                     ].map(({ h, w }) => (
@@ -430,6 +431,14 @@ export default function ComparacionPage() {
                         {/* Total Recibo */}
                         <td className="px-2 py-2 text-xs font-semibold whitespace-nowrap">
                           {recibo ? <span className="text-green-700">${fmt(recibo.total)}</span> : <span className="text-gray-300">—</span>}
+                        </td>
+                        {/* Diferencia Factura - Recibo */}
+                        <td className="px-2 py-2 text-xs font-bold whitespace-nowrap">
+                          {recibo ? (() => {
+                            const dif = Math.round(Number(f.total)) - Math.round(Number(recibo.total))
+                            if (Math.abs(dif) < 1) return <span className="text-emerald-600">$0</span>
+                            return <span className={dif > 0 ? 'text-red-600' : 'text-blue-600'}>${fmt(Math.abs(dif))}{dif < 0 ? ' ↓' : ' ↑'}</span>
+                          })() : <span className="text-gray-300">—</span>}
                         </td>
                         {/* Resultado */}
                         <td className="px-2 py-2 whitespace-nowrap">
