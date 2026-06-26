@@ -242,6 +242,68 @@ export default function DetalleFactura({ factura, onClose }: { factura: Factura;
             </table>
           </div>
         </div>
+
+        {/* ── Resumen de impuestos agrupado por tasa ── */}
+        {(() => {
+          const grupos: Record<number, { base: number; iva: number }> = {}
+          for (const p of factura.productos) {
+            const tasa = (p as any).tasaIva ?? 0
+            if (!grupos[tasa]) grupos[tasa] = { base: 0, iva: 0 }
+            grupos[tasa].base += p.subtotal
+            grupos[tasa].iva  += p.impuesto
+          }
+          const tasas = Object.entries(grupos).sort(([a], [b]) => Number(a) - Number(b))
+          if (tasas.length === 0) return null
+          return (
+            <div className="flex justify-end">
+              <div className="bg-white rounded-lg border overflow-hidden w-full max-w-lg">
+                <div className="px-5 py-2.5 bg-gray-50 border-b">
+                  <h3 className="font-semibold text-gray-700 text-sm">Liquidación de Impuestos</h3>
+                </div>
+                <table className="w-full text-sm">
+                  <thead className="bg-gray-50 border-b">
+                    <tr>
+                      <th className="px-4 py-2 text-left text-xs font-semibold text-gray-600">Concepto</th>
+                      <th className="px-4 py-2 text-right text-xs font-semibold text-gray-600">Base gravable</th>
+                      <th className="px-4 py-2 text-right text-xs font-semibold text-gray-600">% IVA</th>
+                      <th className="px-4 py-2 text-right text-xs font-semibold text-gray-600">Valor IVA</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-100">
+                    {tasas.map(([tasa, d]) => (
+                      <tr key={tasa} className="hover:bg-purple-50">
+                        <td className="px-4 py-2.5 text-gray-700 font-medium">
+                          {Number(tasa) === 0 ? 'Exento / No gravado' : `Gravado IVA ${tasa}%`}
+                        </td>
+                        <td className="px-4 py-2.5 text-right">${fmt(d.base)}</td>
+                        <td className="px-4 py-2.5 text-right text-purple-600 font-bold">{tasa}%</td>
+                        <td className="px-4 py-2.5 text-right font-bold text-purple-700">${fmt(d.iva)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                  <tfoot className="border-t-2 border-gray-200">
+                    <tr className="bg-gray-50">
+                      <td className="px-4 py-2.5 font-bold text-gray-700">Subtotal mercancía</td>
+                      <td className="px-4 py-2.5 text-right font-bold">${fmt(factura.subtotal)}</td>
+                      <td></td>
+                      <td></td>
+                    </tr>
+                    <tr className="bg-purple-50">
+                      <td className="px-4 py-2.5 font-bold text-purple-700">Total IVA</td>
+                      <td></td>
+                      <td></td>
+                      <td className="px-4 py-2.5 text-right font-bold text-purple-700">${fmt(factura.impuestos)}</td>
+                    </tr>
+                    <tr className="bg-blue-600 text-white">
+                      <td className="px-4 py-3 font-bold text-base" colSpan={3}>TOTAL A PAGAR</td>
+                      <td className="px-4 py-3 text-right font-bold text-xl">${fmt(factura.total)}</td>
+                    </tr>
+                  </tfoot>
+                </table>
+              </div>
+            </div>
+          )
+        })()}
       </div>
     </div>
   )
