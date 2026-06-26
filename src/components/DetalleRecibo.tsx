@@ -51,7 +51,8 @@ export default function DetalleRecibo({ recibo, onClose }: { recibo: ReciboMerca
       <tr style="background:${i % 2 === 0 ? '#fff' : '#f8fafc'}">
         <td style="padding:5px 6px;font-family:monospace;font-size:10px">${p.codigo || '—'}</td>
         <td style="padding:5px 6px;font-size:11px">${p.descripcion}</td>
-        <td style="padding:5px 6px;text-align:right">${p.cantidad}</td>
+        <td style="padding:5px 6px;text-align:right;color:#94a3b8">${p.cantidadPedida || '—'}</td>
+        <td style="padding:5px 6px;text-align:right;font-weight:bold;color:#15803d">${p.cantidad}</td>
         <td style="padding:5px 6px;text-align:right">$${fmt(p.totalBruto ?? p.cantidad * p.costoBruto)}</td>
         <td style="padding:5px 6px;text-align:right;color:#c05000">${p.descuento > 0 ? `-$${fmt(p.descuento)}` : '—'}</td>
         <td style="padding:5px 6px;text-align:right">$${fmt(p.baseIva ?? (p.totalBruto - p.descuento))}</td>
@@ -109,15 +110,15 @@ export default function DetalleRecibo({ recibo, onClose }: { recibo: ReciboMerca
 </div>
 <table>
   <thead><tr>
-    <th>Código</th><th>Descripción</th><th class="r">Cant.</th>
-    <th class="r">P. Bruto (Cant×C.Unit)</th><th class="r">Descuento</th><th class="r">Base IVA</th>
+    <th>Código</th><th>Descripción</th><th class="r">Cant.Ped.</th><th class="r">Cant.Rec.</th>
+    <th class="r">P. Bruto</th><th class="r">Descuento</th><th class="r">Base IVA</th>
     <th class="r">% IVA</th><th class="r">IVA</th>
     <th class="r">Impocons.</th><th class="r">IBUA</th><th class="r">ICUI</th>
     <th class="r">Total Neto</th>
   </tr></thead>
   <tbody>${productosHTML}</tbody>
   <tfoot><tr>
-    <td colspan="11" style="text-align:right">SUBTOTAL NETO</td>
+    <td colspan="12" style="text-align:right">SUBTOTAL NETO</td>
     <td style="text-align:right;color:#15803d">$${fmt(t?.subtotalNeto ?? recibo.total)}</td>
   </tr></tfoot>
 </table>
@@ -190,7 +191,7 @@ export default function DetalleRecibo({ recibo, onClose }: { recibo: ReciboMerca
             <table className="w-full text-xs">
               <thead className="bg-gray-100">
                 <tr>
-                  {['Código', 'Descripción', 'Cant.', 'P.Bruto (Cant×C.U)', 'Descuento', 'Base IVA', '%IVA', 'IVA', 'Impocons.', 'IBUA', 'ICUI', 'Total Neto'].map(h => (
+                  {['Código', 'Descripción', 'Cant. Ped.', 'Cant. Rec.', 'P.Bruto', 'Descuento', 'Base IVA', '%IVA', 'IVA', 'Impocons.', 'IBUA', 'ICUI', 'Total Neto'].map(h => (
                     <th key={h} className="text-left px-3 py-2.5 font-semibold text-gray-700 border-b whitespace-nowrap">{h}</th>
                   ))}
                 </tr>
@@ -200,7 +201,10 @@ export default function DetalleRecibo({ recibo, onClose }: { recibo: ReciboMerca
                   <tr key={i} className={i % 2 === 0 ? 'bg-white hover:bg-green-50' : 'bg-gray-50 hover:bg-green-50'}>
                     <td className="px-3 py-2 font-mono text-gray-600 whitespace-nowrap">{p.codigo || '—'}</td>
                     <td className="px-3 py-2 font-medium min-w-[180px]">{p.descripcion}</td>
-                    <td className="px-3 py-2 text-right whitespace-nowrap">{p.cantidad}</td>
+                    <td className="px-3 py-2 text-right whitespace-nowrap text-gray-400">
+                      {(p as any).cantidadPedida > 0 ? (p as any).cantidadPedida : '—'}
+                    </td>
+                    <td className="px-3 py-2 text-right whitespace-nowrap font-bold text-green-700">{p.cantidad}</td>
                     <td className="px-3 py-2 text-right whitespace-nowrap">
                       ${fmt((p as any).totalBruto ?? p.cantidad * ((p as any).costoBruto ?? 0))}
                     </td>
