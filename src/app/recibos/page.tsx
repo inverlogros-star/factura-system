@@ -2,7 +2,7 @@
 import { useEffect, useRef, useState, useMemo } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
-import { Upload, Trash2, PackageCheck, Eye, FileSpreadsheet, FileText, FileCode, Bug, CheckSquare, Square, Database, CalendarIcon, BarChart2, ChevronDown, ChevronUp } from 'lucide-react'
+import { Upload, Trash2, PackageCheck, Eye, FileSpreadsheet, FileText, FileCode, Bug, CheckSquare, Square, Database, CalendarIcon, BarChart2, ChevronDown, ChevronUp, CalendarX2 } from 'lucide-react'
 import { fmtRecibo } from '@/lib/utils'
 import { parsearReciboXML } from '@/lib/parser-dian'
 import { parsearReciboExcel } from '@/lib/parser-recibo-excel'
@@ -27,6 +27,10 @@ export default function RecibosPage() {
   const [seleccionado, setSeleccionado] = useState<ReciboMercancia | null>(null)
   const [marcados, setMarcados]       = useState<Set<string>>(new Set())
   const [debugTexto, setDebugTexto]   = useState<string | null>(null)
+  const [modalBorrar, setModalBorrar] = useState(false)
+  const [borrarDesde, setBorrarDesde] = useState(primerDiaMes())
+  const [borrarHasta, setBorrarHasta] = useState(hoy())
+  const [borrando, setBorrando]       = useState(false)
   const [mostrarContador, setMostrarContador] = useState(true)
 
   // Agrupar recibos por fecha para el contador diario
@@ -118,6 +122,27 @@ export default function RecibosPage() {
     await recargar()
   }
 
+  async function eliminarPorRango() {
+    if (!borrarDesde || !borrarHasta) { toast.error('Selecciona ambas fechas'); return }
+    if (borrarDesde > borrarHasta) { toast.error('Fecha inicial no puede ser mayor a la final'); return }
+    setBorrando(true)
+    try {
+      const res = await fetch('/api/recibos/eliminar-rango', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ desde: borrarDesde, hasta: borrarHasta }),
+      })
+      const data = await res.json()
+      if (data.error) { toast.error(data.error); return }
+      toast.success(`${data.eliminados} recibo(s) eliminado(s) del ${borrarDesde} al ${borrarHasta}`)
+      setModalBorrar(false)
+      setRecibos([])          // limpiar pantalla inmediatamente
+      setMarcados(new Set())
+      await recargar()        // refrescar desde BD
+    } catch { toast.error('Error al eliminar') }
+    finally { setBorrando(false) }
+  }
+
   const todosMarcados = recibos.length > 0 && marcados.size === recibos.length
 
   return (
@@ -133,6 +158,13 @@ export default function RecibosPage() {
               <Trash2 size={15} className="mr-1.5" /> Eliminar ({marcados.size})
             </Button>
           )}
+          <Button
+            variant="outline"
+            onClick={() => setModalBorrar(true)}
+            className="border-red-300 text-red-600 hover:bg-red-50"
+          >
+            <CalendarX2 size={16} className="mr-2" /> Eliminar por fechas
+          </Button>
           <Button onClick={() => inputRef.current?.click()} disabled={cargando}>
             <Upload size={16} className="mr-2" />
             {cargando ? 'Importando...' : 'Subir archivo'}
@@ -356,6 +388,76 @@ export default function RecibosPage() {
         </Card>
       )}
       {seleccionado && <DetalleRecibo recibo={seleccionado} onClose={() => setSeleccionado(null)} />}
+
+      {/* ── Modal de eliminación por rango de fechas ── */}
+      {modalBorrar && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+          <div className="bg-white rounded-2xl shadow-2xl p-8 w-full max-w-md mx-4">
+            {/* Encabezado */}
+            <div className="flex items-center gap-3 mb-6">
+              <div className="p-3 bg-red-100 rounded-full">
+                <CalendarX2 size={24} className="text-red-600" />
+              </div>
+              <div>
+                <h2 className="text-lg font-bold text-gray-900">Eliminar Recibos por Fechas</h2>
+                <p className="text-sm text-gray-500">Se eliminarán TODOS los recibos del rango seleccionado</p>
+              </div>
+            </div>
+
+            {/* Calendarios */}
+            <div className="space-y-4 mb-6">
+              <div className="space-y-1.5">
+                <label className="text-sm font-semibold text-gray-700 flex items-center gap-1.5">
+                  <CalendarIcon size={14} className="text-red-500" /> Fecha inicial
+                </label>
+                <input
+                  type="date"
+                  value={borrarDesde}
+                  onChange={e => setBorrarDesde(e.target.value)}
+                  className="w-full border-2 border-gray-200 rounded-lg px-4 py-2.5 text-sm focus:outline-none focus:border-red-400 bg-white cursor-pointer font-medium"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <label className="text-sm font-semibold text-gray-700 flex items-center gap-1.5">
+                  <CalendarIcon size={14} className="text-red-500" /> Fecha final
+                </label>
+                <input
+                  type="date"
+                  value={borrarHasta}
+                  onChange={e => setBorrarHasta(e.target.value)}
+                  className="w-full border-2 border-gray-200 rounded-lg px-4 py-2.5 text-sm focus:outline-none focus:border-red-400 bg-white cursor-pointer font-medium"
+                />
+              </div>
+            </div>
+
+            {/* Resumen */}
+            <div className="bg-red-50 border border-red-200 rounded-lg px-4 py-3 mb-6">
+              <p className="text-sm text-red-700 font-medium">
+                ⚠️ Se eliminarán todos los recibos del <strong>{borrarDesde}</strong> al <strong>{borrarHasta}</strong>
+              </p>
+              <p className="text-xs text-red-500 mt-1">Esta acción no se puede deshacer.</p>
+            </div>
+
+            {/* Botones */}
+            <div className="flex gap-3">
+              <button
+                onClick={() => setModalBorrar(false)}
+                disabled={borrando}
+                className="flex-1 px-4 py-2.5 rounded-lg border-2 border-gray-300 text-gray-700 font-semibold hover:bg-gray-50 transition-colors"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={eliminarPorRango}
+                disabled={borrando}
+                className="flex-1 px-4 py-2.5 rounded-lg bg-red-600 text-white font-semibold hover:bg-red-700 transition-colors disabled:opacity-50"
+              >
+                {borrando ? 'Eliminando...' : 'Eliminar recibos'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
