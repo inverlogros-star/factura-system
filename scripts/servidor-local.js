@@ -136,6 +136,7 @@ async function importarRecibos(fechaInicio, fechaFin) {
         descPct1, descPct2, descPct3,
         descuento,                         // valor calculado
         tasaIva,                           // EntDet_Iva (tasa %)
+        baseIva:         totalNeto,        // EntDet_TotalNeto = base gravable para IVA
         iva:             ivaValor,         // TotalVrIva (valor real)
         tasaIconsumo,
         iconsumo:        iconsumoValor,

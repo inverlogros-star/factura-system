@@ -727,62 +727,83 @@ function esNotaCreditoPOS(factura: Factura): boolean {
   return false
 }
 
+// Compara el número de factura del proveedor (Ent_NoFactura) con los últimos dígitos
+// del número de factura DIAN, ignorando ceros a la izquierda.
+// Ej: "0989" (DIAN) vs "989" (recibo) → ambos = 989 → match ✓
+function noFacturaCoincide(noFacturaRecibo: string, digitosFacturaDIAN: string): boolean {
+  if (!noFacturaRecibo || !digitosFacturaDIAN) return false
+  const numRec  = parseInt((noFacturaRecibo  || '0').replace(/^0+/, '') || '0', 10)
+  const numFact = parseInt((digitosFacturaDIAN || '0').replace(/^0+/, '') || '0', 10)
+  return numRec > 0 && numFact > 0 && numRec === numFact
+}
+
 export function encontrarReciboPorFactura(
   factura: Factura,
   recibos: ReciboMercancia[]
 ): ReciboMercancia | undefined {
-  // Las notas crédito de POS NO se comparan con recibos de mercancía
   if (esNotaCreditoPOS(factura)) return undefined
 
-  const digitos = ultimos4Digitos(factura.numeroFactura)
-  const nitFact = normalizarNIT(factura.nitProveedor || '')
+  // Extraer los últimos 4 dígitos del número de factura DIAN
+  const digitos4 = ultimos4Digitos(factura.numeroFactura)
+  const nitFact  = normalizarNIT(factura.nitProveedor || '')
 
-  // 1. Coincidencia exacta por numeroFacturaProveedor (última 4 del No. factura)
-  if (digitos) {
-    const porNoFact = recibos.find(r =>
-      r.numeroFacturaProveedor && r.numeroFacturaProveedor === digitos
-    )
-    if (porNoFact) return porNoFact
+  // ── PASO 1 (más confiable): NIT exacto + número de factura coincide ──────────
+  // Doble llave: misma empresa Y mismo número de factura del proveedor
+  // Esto evita cruzar facturas entre recibos del mismo proveedor
+  if (digitos4 && nitFact.length >= 6) {
+    const r = recibos.find(r => {
+      const nitRec = normalizarNIT(r.nitProveedor || '')
+      return nitRec.slice(0, 8) === nitFact.slice(0, 8) &&
+             noFacturaCoincide(r.numeroFacturaProveedor || '', digitos4)
+    })
+    if (r) return r
   }
 
-  // 2. NIT normalizado — coincidencia fuerte (mínimo 8 dígitos coincidentes)
-  if (nitFact.length >= 8) {
-    const porNit = recibos.find(r => {
-      const nitRec = normalizarNIT(r.nitProveedor || '')
-      return nitRec.length >= 8 && nitRec === nitFact
-    })
-    if (porNit) return porNit
-
-    // NIT parcial (al menos 6 dígitos del inicio)
-    const porNitParcial = recibos.find(r => {
-      const nitRec = normalizarNIT(r.nitProveedor || '')
-      return nitRec.length >= 6 && (
-        nitRec.slice(0, 8) === nitFact.slice(0, 8)
+  // ── PASO 2: solo número de factura (sin NIT) — cuando el NIT no está disponible ─
+  // IMPORTANTE: solo si el número de factura es suficientemente largo (> 2 dígitos)
+  // para evitar falsos positivos con números cortos como "10", "20"
+  if (digitos4) {
+    const numFact = parseInt(digitos4.replace(/^0+/, '') || '0', 10)
+    if (numFact >= 100) {  // mínimo 3 dígitos significativos para este paso
+      const r = recibos.find(r =>
+        noFacturaCoincide(r.numeroFacturaProveedor || '', digitos4)
       )
-    })
-    if (porNitParcial) return porNitParcial
-  }
-
-  // 3. Nombre del proveedor — solo si hay AL MENOS 2 palabras significativas en común
-  //    Y el NIT tiene al menos los primeros 4 dígitos en común (evitar falsos positivos)
-  if (factura.proveedor && nitFact.length >= 4) {
-    const palabrasFact = palabrasSignificativas(factura.proveedor)
-    if (palabrasFact.length >= 1) {
-      const porNombre = recibos.find(r => {
-        if (!r.proveedor) return false
-        const nitRec = normalizarNIT(r.nitProveedor || '')
-        // El NIT debe coincidir al menos en los primeros 4 dígitos
-        if (nitRec.length >= 4 && !nitRec.startsWith(nitFact.slice(0, 4)) && !nitFact.startsWith(nitRec.slice(0, 4))) return false
-        const palabrasRec = palabrasSignificativas(r.proveedor)
-        const coincidencias = palabrasFact.filter(p => palabrasRec.some(rp => rp === p || rp.startsWith(p) || p.startsWith(rp)))
-        // Requiere al menos 2 palabras significativas en común
-        return coincidencias.length >= 2
-      })
-      if (porNombre) return porNombre
+      if (r) return r
     }
   }
 
-  // 4. Solo si hay 1 recibo disponible Y el NIT coincide
+  // ── PASO 3: NIT exacto — SOLO si hay un único recibo de ese NIT ──────────────
+  // Si hay varios recibos del mismo proveedor, NO elegir arbitrariamente
+  if (nitFact.length >= 8) {
+    const delMismoNIT = recibos.filter(r => {
+      const nitRec = normalizarNIT(r.nitProveedor || '')
+      return nitRec.length >= 8 && nitRec.slice(0, 8) === nitFact.slice(0, 8)
+    })
+    if (delMismoNIT.length === 1) return delMismoNIT[0]
+    // Si hay varios del mismo NIT, no elegir ninguno por NIT solo (evita cruces equivocados)
+  }
+
+  // ── PASO 4: Nombre del proveedor — 2+ palabras significativas + prefijo NIT ──
+  if (factura.proveedor && nitFact.length >= 4) {
+    const palabrasFact = palabrasSignificativas(factura.proveedor)
+    if (palabrasFact.length >= 1) {
+      const r = recibos.find(r => {
+        if (!r.proveedor) return false
+        const nitRec = normalizarNIT(r.nitProveedor || '')
+        if (nitRec.length >= 4 &&
+            !nitRec.startsWith(nitFact.slice(0, 4)) &&
+            !nitFact.startsWith(nitRec.slice(0, 4))) return false
+        const palabrasRec = palabrasSignificativas(r.proveedor)
+        const comunes = palabrasFact.filter(p =>
+          palabrasRec.some(rp => rp === p || rp.startsWith(p) || p.startsWith(rp))
+        )
+        return comunes.length >= 2
+      })
+      if (r) return r
+    }
+  }
+
+  // ── PASO 5: Único recibo total + NIT coincide en prefijo ────────────────────
   if (recibos.length === 1 && nitFact.length >= 4) {
     const nitRec = normalizarNIT(recibos[0].nitProveedor || '')
     if (nitRec.startsWith(nitFact.slice(0, 4)) || nitFact.startsWith(nitRec.slice(0, 4))) {

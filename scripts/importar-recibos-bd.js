@@ -63,28 +63,26 @@ function construirRecibos(filas) {
     const codigo      = String(fila.EntDet_Barra    || '').trim()
     const descripcion = String(fila.EntDet_Articulo || '').trim()
     const cantidad    = parseFloat(fila.EntDet_CanRec    || 0)
+    const cantPedida  = parseFloat(fila.EntDet_CanPed    || 0)
     const costoBruto  = parseFloat(fila.EntDet_CostoBruto || 0)
     const costoNeto   = parseFloat(fila.EntDet_CostoNeto  || 0)
     const descuento1  = parseFloat(fila.EntDet_Descue01   || 0)
-    const descuento2  = parseFloat(fila.EntDet_Descue02   || 0)
-    const descuento3  = parseFloat(fila.EntDet_Descue03   || 0)
-    const descuento   = descuento1 + descuento2 + descuento3
-    const iva         = parseFloat(fila.EntDet_Iva        || 0)
-    const iconsumo    = parseFloat(fila.EntDet_IConsumo   || 0)
-    const ibua        = parseFloat(fila.EntDet_IBUA       || 0)
-    const icui        = parseFloat(fila.EntDet_ICUI       || 0)
+    // EntDet_Iva = TASA % (0, 5 o 19) — NO es valor monetario
+    const tasaIva     = parseFloat(fila.EntDet_Iva        || 0)
     const estampillas = parseFloat(fila.EntDet_Estampillas|| 0)
     const otros       = parseFloat(fila.EntDet_Otros      || 0)
-    // P.Bruto = Cant × CostoBruto — redondeado al peso
-    const totalBruto  = Math.round(cantidad * costoBruto)
-    const totalNeto   = Math.round(parseFloat(fila.EntDet_TotalNeto  || (cantidad * costoNeto)))
-    // Base IVA = P.Bruto - Descuento
-    const baseIva     = totalBruto - descuento
-    // Tasa IVA desde la BD, redondeada a 0, 5 o 19
-    const tasaIvaDB   = baseIva > 0 && iva > 0 ? (iva / baseIva) * 100 : 0
-    const tasaIva     = tasaIvaDB > 15 ? 19 : tasaIvaDB > 3 ? 5 : 0
-    // IVA redondeado al peso
-    const ivaCalc     = Math.round(baseIva * (tasaIva / 100))
+    // Totales de línea desde la BD
+    const totalBruto  = Math.round(parseFloat(fila.EntDet_TotalBruto || 0) || cantidad * costoBruto)
+    const totalNeto   = Math.round(parseFloat(fila.EntDet_TotalNeto  || 0) || cantidad * costoNeto)
+    const descuento   = Math.max(0, totalBruto - totalNeto)
+    // Base IVA = TotalNeto (EntDet_TotalNeto, ya con descuentos aplicados)
+    const baseIva     = totalNeto
+    // Valores reales de impuestos desde la BD (TotalVr*)
+    const ivaValor    = Math.round(parseFloat(fila.TotalVrIva  || 0))
+    const ibuaValor   = Math.round(parseFloat(fila.TotalVrIBUA || 0))
+    const icuiValor   = Math.round(parseFloat(fila.TotalVrICUI || 0))
+    // Si TotalVrIva = 0, calcular desde base × tasa
+    const ivaCalc     = ivaValor > 0 ? ivaValor : Math.round(baseIva * (tasaIva / 100))
 
     if (!numRecibo) continue
 
@@ -121,20 +119,21 @@ function construirRecibos(filas) {
       recibo.productos.push({
         codigo,
         descripcion,
+        cantidadPedida: cantPedida,
         cantidad,
-        costoBruto,          // precio unitario bruto
-        totalBruto,          // Cant × CostoBruto
+        costoBruto,
         precioUnitario: costoNeto,
-        descuento,           // descuento total de la línea
-        baseIva,             // P.Bruto - Descuento (base para calcular IVA)
+        descuento,
+        baseIva,             // EntDet_TotalNeto = base gravable para IVA
         subtotal: totalNeto,
-        iva: ivaCalc,        // Base × tasaIva%
-        tasaIva,
-        iconsumo,
-        ibua,
-        icui,
+        tasaIva,             // EntDet_Iva (tasa %)
+        iva:      ivaCalc,   // TotalVrIva si > 0, sino base × tasa
+        ibua:     ibuaValor, // TotalVrIBUA
+        icui:     icuiValor, // TotalVrICUI
+        iconsumo: 0,
         estampillas,
         otros,
+        totalBruto,
       })
       recibo.total += totalNeto
     }

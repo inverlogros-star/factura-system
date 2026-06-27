@@ -3,7 +3,7 @@ import { useEffect, useState, useMemo } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { GitCompareArrows, ChevronDown, ChevronUp, FileDown, Trash2, CheckSquare, Square, Eye, AlertTriangle, CheckCircle2, Search, FileWarning, X } from 'lucide-react'
+import { GitCompareArrows, ChevronDown, ChevronUp, FileDown, Trash2, CheckSquare, Square, Eye, AlertTriangle, CheckCircle2, Search, FileWarning, X, RefreshCw } from 'lucide-react'
 import { fmtRecibo } from '@/lib/utils'
 import { storeFacturas, storeRecibos, storeComparaciones } from '@/lib/store'
 import { compararFacturaConRecibo, encontrarReciboPorFactura, ultimos4Digitos } from '@/lib/comparador'
@@ -134,35 +134,53 @@ function PanelDiferencias({ resultado, factura, recibo, onClose, onEliminar }: {
             icuiFact     += (p as any).icui     || 0
           }
 
-          // Impuestos del RECIBO — prioridad: totales del encabezado (Ent_Iva) > suma productos
+          // Impuestos del RECIBO — calculados desde productos del recibo (EntDet_Iva + TotalVrIva)
           const t    = recibo?.totales
           const prods = recibo?.productos ?? []
-          // SIEMPRE usar totales del header — son los valores reales de la BD
-          const ivaRec      = Math.round(t?.iva      ?? prods.reduce((s: number, p: any) => s + (Number(p.iva)      || 0), 0))
+          // Agrupar productos del recibo por tasa IVA (EntDet_Iva = 0, 5 o 19)
+          const prodsRec5  = prods.filter((p: any) => Number(p.tasaIva) === 5)
+          const prodsRec19 = prods.filter((p: any) => Number(p.tasaIva) === 19)
+          // Base gravable = subtotal de cada producto (EntDet_TotalNeto, ya con descuentos)
+          const base5RecCalc  = Math.round(prodsRec5.reduce((s: number, p: any)  => s + (Number(p.subtotal) || 0), 0))
+          const base19RecCalc = Math.round(prodsRec19.reduce((s: number, p: any) => s + (Number(p.subtotal) || 0), 0))
+          // Valor IVA: usar TotalVrIva si > 0, si no calcular desde base (EntDet_TotalNeto * tasa)
+          const ivaRec5Calc  = Math.round(prodsRec5.reduce((s: number, p: any)  => {
+            const v = Number(p.iva); return s + (v > 0 ? v : (Number(p.subtotal) || 0) * 0.05)
+          }, 0))
+          const ivaRec19Calc = Math.round(prodsRec19.reduce((s: number, p: any) => {
+            const v = Number(p.iva); return s + (v > 0 ? v : (Number(p.subtotal) || 0) * 0.19)
+          }, 0))
+          // Fallback: si no hay productos con tasa conocida, usar header Ent_Iva con split proporcional
+          const ivaRecHeader   = Math.round(t?.iva ?? 0)
+          const ivaRecProdsTot = ivaRec5Calc + ivaRec19Calc
+          const ivaRec5  = ivaRecProdsTot > 0 ? ivaRec5Calc
+            : (ivaRecHeader > 0 && impFact5  > 0 ? Math.round(ivaRecHeader * (impFact5  / (impFact5 + impFact19 || 1))) : 0)
+          const ivaRec19 = ivaRecProdsTot > 0 ? ivaRec19Calc
+            : (ivaRecHeader > 0 && impFact19 > 0 ? Math.round(ivaRecHeader * (impFact19 / (impFact5 + impFact19 || 1))) : 0)
+          const ivaRec   = ivaRec5 + ivaRec19 || ivaRecHeader
+          // Bases del recibo: desde productos si existen, si no derivar del IVA
+          const base5Rec  = base5RecCalc  > 0 ? base5RecCalc  : (ivaRec5  > 0 ? Math.round(ivaRec5  / 0.05)  : 0)
+          const base19Rec = base19RecCalc > 0 ? base19RecCalc : (ivaRec19 > 0 ? Math.round(ivaRec19 / 0.19) : 0)
+          // IBUA e ICUI: desde TotalVrIBUA y TotalVrICUI por producto
           const iconsumoRec = Math.round(t?.iconsumo ?? prods.reduce((s: number, p: any) => s + (Number(p.iconsumo) || 0), 0))
-          const ibuaRec     = Math.round(t?.ibua     ?? prods.reduce((s: number, p: any) => s + (Number(p.ibua)     || 0), 0))
-          const icuiRec     = Math.round(t?.icui     ?? prods.reduce((s: number, p: any) => s + (Number(p.icui)     || 0), 0))
+          const ibuaRec     = Math.round(t?.ibua ?? prods.reduce((s: number, p: any) => s + (Number(p.ibua)     || 0), 0))
+          const icuiRec     = Math.round(t?.icui ?? prods.reduce((s: number, p: any) => s + (Number(p.icui)     || 0), 0))
           const totalReciboReal = Math.round(t?.neto ?? Number(resultado.valorTotalRecibo))
           const necesitaReimportar = ivaRec === 0 && prods.length > 0 && !recibo
           const totalIvaFact  = Math.round(impFact5 + impFact19)
-          const totalIvaRec   = ivaRec
-          const difIva        = totalIvaFact - totalIvaRec
+          const difIva        = totalIvaFact - ivaRec
           const difIconsumo   = Math.round(iconsumoFact) - iconsumoRec
           const difIbua       = Math.round(ibuaFact) - ibuaRec
           const difIcui       = Math.round(icuiFact) - icuiRec
 
           const totalFact = Math.round(Number(factura.total))
           const totalRec  = totalReciboReal
-          // Recibo no tiene IVA por tasa — solo total IVA
-          // Para bases del recibo, usar proporcional si hay total IVA
-          const base5Rec  = ivaRec > 0 && impFact5 > 0  ? Math.round(ivaRec * (impFact5  / (impFact5 + impFact19 || 1)) / 0.05)  : 0
-          const base19Rec = ivaRec > 0 && impFact19 > 0 ? Math.round(ivaRec * (impFact19 / (impFact5 + impFact19 || 1)) / 0.19) : 0
 
           const filas = [
-            { cuenta: '14351015', concepto: 'Base gravable IVA 5%',  factura: Math.round(baseFact5),  recibo: base5Rec  || (0 as string|number), dif: Math.round(baseFact5)  - (base5Rec  || 0), esBase: true  },
-            { cuenta: '24081015', concepto: 'IVA 5%',                factura: Math.round(impFact5),   recibo: ivaRec > 0 ? Math.round(ivaRec * (impFact5 / (impFact5 + impFact19 || 1))) : 0, dif: Math.round(impFact5) - Math.round(ivaRec * (impFact5 / (impFact5 + impFact19 || 1))), esBase: false },
-            { cuenta: '14351007', concepto: 'Base gravable IVA 19%', factura: Math.round(baseFact19), recibo: base19Rec || 0, dif: Math.round(baseFact19) - (base19Rec || 0), esBase: true  },
-            { cuenta: '24081007', concepto: 'IVA 19%',               factura: Math.round(impFact19),  recibo: ivaRec > 0 ? Math.round(ivaRec * (impFact19 / (impFact5 + impFact19 || 1))) : 0, dif: Math.round(impFact19) - Math.round(ivaRec * (impFact19 / (impFact5 + impFact19 || 1))), esBase: false },
+            { cuenta: '14351015', concepto: 'Base gravable IVA 5%',  factura: Math.round(baseFact5),  recibo: base5Rec,  dif: Math.round(baseFact5)  - base5Rec,  esBase: true  },
+            { cuenta: '24081015', concepto: 'IVA 5%',                factura: Math.round(impFact5),   recibo: ivaRec5,   dif: Math.round(impFact5)   - ivaRec5,   esBase: false },
+            { cuenta: '14351007', concepto: 'Base gravable IVA 19%', factura: Math.round(baseFact19), recibo: base19Rec, dif: Math.round(baseFact19) - base19Rec, esBase: true  },
+            { cuenta: '24081007', concepto: 'IVA 19%',               factura: Math.round(impFact19),  recibo: ivaRec19,  dif: Math.round(impFact19)  - ivaRec19,  esBase: false },
             { cuenta: '14351011', concepto: 'Base Impoconsumo',      factura: Math.round(iconsumoFact), recibo: iconsumoRec, dif: Math.round(iconsumoFact) - iconsumoRec, esBase: false },
             { cuenta: '14351012', concepto: 'Base IBUA',             factura: Math.round(ibuaFact),   recibo: ibuaRec,     dif: Math.round(ibuaFact) - ibuaRec,     esBase: false },
             { cuenta: '14351013', concepto: 'Base ICUI',             factura: Math.round(icuiFact),   recibo: icuiRec,     dif: Math.round(icuiFact) - icuiRec,     esBase: false },
@@ -402,6 +420,25 @@ export default function ComparacionPage() {
           </p>
         </div>
         <div className="flex gap-2 items-center flex-wrap">
+          {/* Limpiar todas las comparaciones y reconsolidar */}
+          {yaComparadas > 0 && (
+            <Button
+              variant="outline"
+              className="border-red-300 text-red-600 hover:bg-red-50"
+              disabled={procesando}
+              onClick={async () => {
+                if (!confirm(`¿Borrar las ${yaComparadas} comparaciones y dejar todas las facturas en Pendiente para reconsolidar?`)) return
+                setProcesando(true)
+                const res = await fetch('/api/comparaciones', { method: 'DELETE' })
+                if (res.ok) { await recargar(); toast.success('Comparaciones borradas — reimporta recibos y vuelve a comparar') }
+                else toast.error('Error al borrar comparaciones')
+                setProcesando(false)
+              }}
+            >
+              <RefreshCw size={15} className="mr-1.5" />
+              Limpiar y reconsolidar ({yaComparadas})
+            </Button>
+          )}
           {/* Comparar todo en un clic */}
           <Button
             onClick={compararTodo}

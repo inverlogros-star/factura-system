@@ -26,6 +26,16 @@ export async function GET() {
   }
 }
 
+export async function DELETE() {
+  try {
+    await sql`DELETE FROM comparaciones`
+    await sql`UPDATE facturas SET estado = 'pendiente', recibo_asociado_id = NULL WHERE estado IN ('conciliada', 'con_diferencias')`
+    return NextResponse.json({ ok: true })
+  } catch (err) {
+    return NextResponse.json({ error: String(err) }, { status: 500 })
+  }
+}
+
 export async function POST(req: NextRequest) {
   try {
     const c: ResultadoComparacion = await req.json()
