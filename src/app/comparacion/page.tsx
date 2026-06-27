@@ -113,10 +113,26 @@ function PanelDiferencias({ resultado, factura, recibo, onClose, onEliminar }: {
 
         {/* ── CUADRO COMPARATIVO DE IMPUESTOS ── */}
         {factura.productos.length > 0 && (() => {
+          // Detección de frutas y verduras para cuenta 14351002
+          const KW_FV = ['manzana','pera','naranja','mandarina','limon','lima','toronja','uva','fresa',
+            'mora','frambuesa','arandano','cereza','melon','sandia','patilla','banano','banana','platano',
+            'mango','papaya','pina','ananas','coco','guayaba','maracuya','granadilla','lulo','curuba',
+            'gulupa','uchuva','feijoa','pitahaya','aguacate','guanabana','zapote','nispero','mamoncillo',
+            'carambola','borojo','tomate','papa','yuca','name','ñame','arracacha','auyama','ahuyama',
+            'calabaza','zapallo','pepino','cohombro','zanahoria','remolacha','betarraga','cebolla','ajo',
+            'pimenton','cilantro','perejil','espinaca','lechuga','repollo','coliflor','brocoli',
+            'habichuela','frijol','arveja','maiz','choclo','mazorca','guatila','cidra','bore','malanga',
+            'apio','acelga','berenjena','champiñon','champinon','fruta','verdura','hortaliza','vegetal',
+            'lichia','pitaya','dragon fruit','rambutan','tamarindo','marañon','noni']
+          function esFV(desc: string): boolean {
+            const d = desc.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '')
+            return KW_FV.some(kw => d.includes(kw))
+          }
+
           // Calcular impuestos de la FACTURA agrupados por tasa
-          const impFact: Record<string, {base:number; iva:number}> = {}
-          let impFact0 = 0, impFact5 = 0, impFact19 = 0
-          let baseFact0 = 0, baseFact5 = 0, baseFact19 = 0
+          let impFact5 = 0, impFact19 = 0
+          let baseFact5 = 0, baseFact19 = 0
+          let baseFact14351002 = 0, baseFact14351001 = 0   // excluidos IVA: F/V y otros
           let iconsumoFact = 0, ibuaFact = 0, icuiFact = 0
           for (const p of factura.productos) {
             const ivaV  = (p as any).ivaValor ?? p.impuesto
@@ -128,7 +144,8 @@ function PanelDiferencias({ resultado, factura, recibo, onClose, onEliminar }: {
             }
             if (tasa === 5)       { baseFact5  += p.subtotal; impFact5  += ivaV }
             else if (tasa === 19) { baseFact19 += p.subtotal; impFact19 += ivaV }
-            else                  { baseFact0  += p.subtotal }
+            else if (esFV(p.descripcion)) baseFact14351002 += p.subtotal
+            else                          baseFact14351001 += p.subtotal
             iconsumoFact += (p as any).iconsumo || 0
             ibuaFact     += (p as any).ibua     || 0
             icuiFact     += (p as any).icui     || 0
@@ -161,6 +178,10 @@ function PanelDiferencias({ resultado, factura, recibo, onClose, onEliminar }: {
           // Bases del recibo: desde productos si existen, si no derivar del IVA
           const base5Rec  = base5RecCalc  > 0 ? base5RecCalc  : (ivaRec5  > 0 ? Math.round(ivaRec5  / 0.05)  : 0)
           const base19Rec = base19RecCalc > 0 ? base19RecCalc : (ivaRec19 > 0 ? Math.round(ivaRec19 / 0.19) : 0)
+          // Excluidos IVA del RECIBO: productos con tasaIva === 0
+          const prodsRec0 = prods.filter((p: any) => Number(p.tasaIva) === 0)
+          const baseRec14351002 = Math.round(prodsRec0.filter((p: any) => esFV(p.descripcion || '')).reduce((s: number, p: any) => s + (Number(p.subtotal) || 0), 0))
+          const baseRec14351001 = Math.round(prodsRec0.filter((p: any) => !esFV(p.descripcion || '')).reduce((s: number, p: any) => s + (Number(p.subtotal) || 0), 0))
           // IBUA e ICUI: desde TotalVrIBUA y TotalVrICUI por producto
           const iconsumoRec = Math.round(t?.iconsumo ?? prods.reduce((s: number, p: any) => s + (Number(p.iconsumo) || 0), 0))
           const ibuaRec     = Math.round(t?.ibua ?? prods.reduce((s: number, p: any) => s + (Number(p.ibua)     || 0), 0))
@@ -177,6 +198,8 @@ function PanelDiferencias({ resultado, factura, recibo, onClose, onEliminar }: {
           const totalRec  = totalReciboReal
 
           const filas = [
+            { cuenta: '14351002', concepto: 'Frutas y verduras (excluidas IVA)', factura: Math.round(baseFact14351002), recibo: baseRec14351002, dif: Math.round(baseFact14351002) - baseRec14351002, esBase: false },
+            { cuenta: '14351001', concepto: 'Compras excluidas IVA (otros)',      factura: Math.round(baseFact14351001), recibo: baseRec14351001, dif: Math.round(baseFact14351001) - baseRec14351001, esBase: false },
             { cuenta: '14351015', concepto: 'Base gravable IVA 5%',  factura: Math.round(baseFact5),  recibo: base5Rec,  dif: Math.round(baseFact5)  - base5Rec,  esBase: true  },
             { cuenta: '24081015', concepto: 'IVA 5%',                factura: Math.round(impFact5),   recibo: ivaRec5,   dif: Math.round(impFact5)   - ivaRec5,   esBase: false },
             { cuenta: '14351007', concepto: 'Base gravable IVA 19%', factura: Math.round(baseFact19), recibo: base19Rec, dif: Math.round(baseFact19) - base19Rec, esBase: true  },
