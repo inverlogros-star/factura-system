@@ -230,7 +230,7 @@ export default function FacturasPage() {
             </div>
             <Button
               onClick={descargarInformePDF}
-              disabled={generandoInforme || facturasInforme.length === 0}
+              disabled={generandoInforme}
               className="bg-blue-700 hover:bg-blue-800"
             >
               <FileDown size={16} className="mr-2" />

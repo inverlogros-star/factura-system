@@ -300,7 +300,7 @@ export default function RecibosPage() {
             </div>
             <Button
               onClick={descargarInformePDF}
-              disabled={generandoInforme || recibosInforme.length === 0}
+              disabled={generandoInforme}
               className="bg-emerald-700 hover:bg-emerald-800"
             >
               <FileDown size={16} className="mr-2" />
