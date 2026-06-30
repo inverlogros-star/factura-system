@@ -366,13 +366,14 @@ export default function ComparacionPage() {
   }
 
   async function compararTodo() {
-    // Comparar solo facturas (no notas crédito POS) que tengan recibo detectado
-    const pendientes = facturas.filter(f =>
+    // IMPORTANTE: comparar SOLO dentro del rango de fechas filtrado en pantalla
+    // (facturasFiltradas ya excluye notas crédito/débito y aplica fechaDesde/fechaHasta).
+    // Antes se usaba `facturas` (todas), lo que comparaba facturas viejas fuera de rango.
+    const pendientes = facturasFiltradas.filter(f =>
       f.estado === 'pendiente' &&
-      f.tipoDocumento !== 'nota_credito' &&  // excluir notas crédito
       !!encontrarReciboPorFactura(f, recibos)
     )
-    if (pendientes.length === 0) { toast.info('No hay facturas pendientes con recibo para comparar'); return }
+    if (pendientes.length === 0) { toast.info('No hay facturas pendientes con recibo en el rango seleccionado'); return }
     setProcesando(true)
     let procesadas = 0
     for (const factura of pendientes) {
@@ -394,7 +395,7 @@ export default function ComparacionPage() {
     await recargar()
     setSeleccionadas(new Set())
     setProcesando(false)
-    toast.success(`${procesadas} facturas comparadas automáticamente`)
+    toast.success(`${procesadas} facturas comparadas automáticamente (rango ${fechaDesde || '…'} al ${fechaHasta || '…'})`)
   }
 
   async function eliminarComparacion(comparacionId: string, facturaId: string) {
@@ -468,6 +469,32 @@ export default function ComparacionPage() {
           </p>
         </div>
         <div className="flex gap-2 items-center flex-wrap">
+          {/* Rango de fechas para filtrar y comparar */}
+          <div className="flex items-center gap-1.5 bg-white border border-gray-200 rounded-lg px-2 py-1">
+            <span className="text-xs text-gray-400 pl-1">Desde</span>
+            <input
+              type="date"
+              value={fechaDesde}
+              onChange={e => setFechaDesde(e.target.value)}
+              className="text-xs border-0 focus:outline-none focus:ring-0 px-1 py-1 cursor-pointer"
+            />
+            <span className="text-xs text-gray-400">Hasta</span>
+            <input
+              type="date"
+              value={fechaHasta}
+              onChange={e => setFechaHasta(e.target.value)}
+              className="text-xs border-0 focus:outline-none focus:ring-0 px-1 py-1 cursor-pointer"
+            />
+            {(fechaDesde || fechaHasta) && (
+              <button
+                onClick={() => { setFechaDesde(''); setFechaHasta('') }}
+                className="text-gray-400 hover:text-red-500 px-1"
+                title="Limpiar rango"
+              >
+                <X size={13} />
+              </button>
+            )}
+          </div>
           {/* Limpiar todas las comparaciones y reconsolidar */}
           {yaComparadas > 0 && (
             <Button
