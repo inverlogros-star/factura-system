@@ -3,7 +3,7 @@ import { useEffect, useRef, useState } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { Upload, Trash2, FileText, Eye, CheckSquare, Square, Search, X } from 'lucide-react'
+import { Upload, Trash2, FileText, Eye, CheckSquare, Square, Search, X, CalendarX2 } from 'lucide-react'
 import { parsearFacturaDIAN } from '@/lib/parser-dian'
 import { storeFacturas } from '@/lib/store'
 import type { Factura } from '@/types'
@@ -38,6 +38,11 @@ export default function FacturasPage() {
   const [filtroTipo, setFiltroTipo] = useState<string>('todos')
   const [busqueda, setBusqueda] = useState('')
   const inputRef = useRef<HTMLInputElement>(null)
+  // Modal de eliminación por rango de fechas
+  const [modalBorrarRango, setModalBorrarRango] = useState(false)
+  const [borrarDesde, setBorrarDesde] = useState('')
+  const [borrarHasta, setBorrarHasta] = useState('')
+  const [borrando, setBorrando] = useState(false)
 
   const recargar = async () => { setFacturas(await storeFacturas.getAll()); setMarcadas(new Set()) }
   useEffect(() => { recargar() }, [])
@@ -75,6 +80,26 @@ export default function FacturasPage() {
     await recargar()
   }
 
+  async function eliminarPorRango() {
+    if (!borrarDesde || !borrarHasta) { toast.error('Selecciona ambas fechas'); return }
+    if (borrarDesde > borrarHasta) { toast.error('Fecha inicial no puede ser mayor a la final'); return }
+    setBorrando(true)
+    try {
+      const res = await fetch('/api/facturas/eliminar-rango', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ desde: borrarDesde, hasta: borrarHasta }),
+      })
+      const data = await res.json()
+      if (data.error) { toast.error(data.error); return }
+      toast.success(`${data.eliminados} factura(s) eliminada(s) del ${borrarDesde} al ${borrarHasta}`)
+      setModalBorrarRango(false)
+      setBorrarDesde(''); setBorrarHasta('')
+      await recargar()
+    } catch { toast.error('Error al eliminar') }
+    finally { setBorrando(false) }
+  }
+
   const facturasFiltradas = facturas.filter(f => {
     const tipoOk = filtroTipo === 'todos' || (f.tipoDocumento || 'factura') === filtroTipo
     const q = busqueda.trim().toLowerCase()
@@ -106,6 +131,13 @@ export default function FacturasPage() {
               Eliminar ({marcadas.size})
             </Button>
           )}
+          <Button
+            variant="outline"
+            onClick={() => setModalBorrarRango(true)}
+            className="border-red-300 text-red-600 hover:bg-red-50"
+          >
+            <CalendarX2 size={16} className="mr-2" /> Eliminar por fechas
+          </Button>
           <Button onClick={() => inputRef.current?.click()} disabled={cargando}>
             <Upload size={16} className="mr-2" />
             {cargando ? 'Importando...' : 'Subir XML'}
@@ -217,6 +249,76 @@ export default function FacturasPage() {
         </Card>
       )}
       {seleccionada && <DetalleFactura factura={seleccionada} onClose={() => setSeleccionada(null)} />}
+
+      {/* ── Modal de eliminación por rango de fechas ── */}
+      {modalBorrarRango && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+          <div className="bg-white rounded-2xl shadow-2xl p-8 w-full max-w-md mx-4">
+            {/* Encabezado */}
+            <div className="flex items-center gap-3 mb-6">
+              <div className="p-3 bg-red-100 rounded-full">
+                <CalendarX2 size={24} className="text-red-600" />
+              </div>
+              <div>
+                <h2 className="text-lg font-bold text-gray-900">Eliminar Facturas por Fechas</h2>
+                <p className="text-sm text-gray-500">Se eliminarán TODAS las facturas del rango seleccionado</p>
+              </div>
+            </div>
+
+            {/* Calendarios */}
+            <div className="space-y-4 mb-6">
+              <div className="space-y-1.5">
+                <label className="text-sm font-semibold text-gray-700 flex items-center gap-1.5">
+                  Fecha inicial
+                </label>
+                <input
+                  type="date"
+                  value={borrarDesde}
+                  onChange={e => setBorrarDesde(e.target.value)}
+                  className="w-full border-2 border-gray-200 rounded-lg px-4 py-2.5 text-sm focus:outline-none focus:border-red-400 bg-white cursor-pointer font-medium"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <label className="text-sm font-semibold text-gray-700 flex items-center gap-1.5">
+                  Fecha final
+                </label>
+                <input
+                  type="date"
+                  value={borrarHasta}
+                  onChange={e => setBorrarHasta(e.target.value)}
+                  className="w-full border-2 border-gray-200 rounded-lg px-4 py-2.5 text-sm focus:outline-none focus:border-red-400 bg-white cursor-pointer font-medium"
+                />
+              </div>
+            </div>
+
+            {/* Resumen */}
+            <div className="bg-red-50 border border-red-200 rounded-lg px-4 py-3 mb-6">
+              <p className="text-sm text-red-700 font-medium">
+                ⚠️ Se eliminarán todas las facturas del <strong>{borrarDesde || '…'}</strong> al <strong>{borrarHasta || '…'}</strong>
+              </p>
+              <p className="text-xs text-red-500 mt-1">Esta acción no se puede deshacer.</p>
+            </div>
+
+            {/* Botones */}
+            <div className="flex gap-3">
+              <button
+                onClick={() => setModalBorrarRango(false)}
+                disabled={borrando}
+                className="flex-1 px-4 py-2.5 rounded-lg border-2 border-gray-300 text-gray-700 font-semibold hover:bg-gray-50 transition-colors"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={eliminarPorRango}
+                disabled={borrando}
+                className="flex-1 px-4 py-2.5 rounded-lg bg-red-600 text-white font-semibold hover:bg-red-700 transition-colors disabled:opacity-50"
+              >
+                {borrando ? 'Eliminando...' : 'Eliminar facturas'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
