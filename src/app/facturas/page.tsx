@@ -1,12 +1,14 @@
 'use client'
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { Upload, Trash2, FileText, Eye, CheckSquare, Square, Search, X, CalendarX2 } from 'lucide-react'
+import { Upload, Trash2, FileText, Eye, CheckSquare, Square, Search, X, CalendarX2, FileDown, CalendarIcon } from 'lucide-react'
 import { parsearFacturaDIAN } from '@/lib/parser-dian'
-import { storeFacturas } from '@/lib/store'
-import type { Factura } from '@/types'
+import { storeFacturas, storeRecibos } from '@/lib/store'
+import { generarInformeFacturasPDF } from '@/lib/informe-facturas-pdf'
+import { fmtRecibo } from '@/lib/utils'
+import type { Factura, ReciboMercancia } from '@/types'
 import { toast } from 'sonner'
 import DetalleFactura from '@/components/DetalleFactura'
 
@@ -30,8 +32,12 @@ const TIPO_COLOR: Record<string, string> = {
   otro: 'bg-gray-100 text-gray-600',
 }
 
+function hoy() { return new Date().toISOString().slice(0, 10) }
+function primerDiaMes() { const d = new Date(); d.setDate(1); return d.toISOString().slice(0, 10) }
+
 export default function FacturasPage() {
   const [facturas, setFacturas] = useState<Factura[]>([])
+  const [recibos, setRecibos] = useState<ReciboMercancia[]>([])
   const [cargando, setCargando] = useState(false)
   const [seleccionada, setSeleccionada] = useState<Factura | null>(null)
   const [marcadas, setMarcadas] = useState<Set<string>>(new Set())
@@ -43,9 +49,36 @@ export default function FacturasPage() {
   const [borrarDesde, setBorrarDesde] = useState('')
   const [borrarHasta, setBorrarHasta] = useState('')
   const [borrando, setBorrando] = useState(false)
+  // Informe de facturas/notas por rango de fechas
+  const [informeDesde, setInformeDesde] = useState(primerDiaMes())
+  const [informeHasta, setInformeHasta] = useState(hoy())
+  const [generandoInforme, setGenerandoInforme] = useState(false)
 
-  const recargar = async () => { setFacturas(await storeFacturas.getAll()); setMarcadas(new Set()) }
+  const recargar = async () => {
+    const [fs, rs] = await Promise.all([storeFacturas.getAll(), storeRecibos.getAll()])
+    setFacturas(fs); setRecibos(rs); setMarcadas(new Set())
+  }
   useEffect(() => { recargar() }, [])
+
+  const facturasInforme = useMemo(() => {
+    return facturas
+      .filter(f => {
+        const fecha = (f.fecha || '').slice(0, 10)
+        return fecha >= informeDesde && fecha <= informeHasta
+      })
+      .sort((a, b) => (a.fecha || '').localeCompare(b.fecha || ''))
+  }, [facturas, informeDesde, informeHasta])
+  const totalInforme = facturasInforme.reduce((s, f) => s + Number(f.total || 0), 0)
+
+  async function descargarInformePDF() {
+    if (facturasInforme.length === 0) { toast.error('No hay documentos en el rango seleccionado'); return }
+    setGenerandoInforme(true)
+    try {
+      await generarInformeFacturasPDF(facturasInforme, recibos, informeDesde, informeHasta)
+      toast.success(`Informe generado: ${facturasInforme.length} documento(s)`)
+    } catch (e) { toast.error(`Error generando PDF: ${(e as Error).message}`) }
+    finally { setGenerandoInforme(false) }
+  }
 
   function toggleMarca(id: string) {
     setMarcadas(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n })
@@ -157,6 +190,92 @@ export default function FacturasPage() {
           </button>
         ))}
       </div>
+
+      {/* ── Informe de Facturas, Notas Crédito y Débito por Rango de Fechas (PDF) ── */}
+      <Card className="border-blue-200 bg-blue-50/40">
+        <CardHeader className="pb-3">
+          <CardTitle className="text-base flex items-center gap-2">
+            <FileDown size={18} className="text-blue-600" />
+            Informe de Facturas, Notas Crédito y Débito (PDF)
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="flex flex-wrap gap-4 items-end">
+            <div className="space-y-1">
+              <label className="text-xs font-semibold text-gray-600 flex items-center gap-1">
+                <CalendarIcon size={12} /> Fecha inicial
+              </label>
+              <input
+                type="date"
+                value={informeDesde}
+                onChange={e => setInformeDesde(e.target.value)}
+                className="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400 bg-white cursor-pointer"
+              />
+            </div>
+            <div className="space-y-1">
+              <label className="text-xs font-semibold text-gray-600 flex items-center gap-1">
+                <CalendarIcon size={12} /> Fecha final
+              </label>
+              <input
+                type="date"
+                value={informeHasta}
+                onChange={e => setInformeHasta(e.target.value)}
+                className="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400 bg-white cursor-pointer"
+              />
+            </div>
+            <div className="text-sm text-gray-600">
+              <span className="bg-blue-100 text-blue-700 px-3 py-1.5 rounded-full font-medium">
+                {facturasInforme.length} documento(s) · ${totalInforme.toLocaleString('es-CO', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
+              </span>
+            </div>
+            <Button
+              onClick={descargarInformePDF}
+              disabled={generandoInforme || facturasInforme.length === 0}
+              className="bg-blue-700 hover:bg-blue-800"
+            >
+              <FileDown size={16} className="mr-2" />
+              {generandoInforme ? 'Generando...' : 'Generar PDF'}
+            </Button>
+          </div>
+
+          {/* Vista previa */}
+          {facturasInforme.length > 0 && (
+            <div className="mt-4 border rounded-lg overflow-hidden max-h-64 overflow-y-auto">
+              <table className="w-full text-xs">
+                <thead className="bg-blue-100 text-blue-800 sticky top-0">
+                  <tr>
+                    {['Fecha', 'Tipo', 'No. Factura/Nota', 'No. Recibo', 'Proveedor', 'NIT Proveedor', 'Valor Total'].map(h => (
+                      <th key={h} className="text-left px-3 py-2 font-semibold whitespace-nowrap">{h}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-100 bg-white">
+                  {facturasInforme.map(f => {
+                    const recibo = f.reciboAsociadoId ? recibos.find(r => r.id === f.reciboAsociadoId) : undefined
+                    return (
+                      <tr key={f.id} className="hover:bg-blue-50">
+                        <td className="px-3 py-1.5 text-gray-500 whitespace-nowrap">{f.fecha || '—'}</td>
+                        <td className="px-3 py-1.5 whitespace-nowrap">
+                          <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${TIPO_COLOR[f.tipoDocumento || 'factura']}`}>
+                            {TIPO_LABEL[f.tipoDocumento || 'factura']}
+                          </span>
+                        </td>
+                        <td className="px-3 py-1.5 font-mono font-semibold whitespace-nowrap">{f.numeroFactura}</td>
+                        <td className="px-3 py-1.5 font-mono whitespace-nowrap">{recibo ? fmtRecibo(recibo.numeroRecibo) : '—'}</td>
+                        <td className="px-3 py-1.5">{f.proveedor || '—'}</td>
+                        <td className="px-3 py-1.5 text-gray-500 whitespace-nowrap">{f.nitProveedor || '—'}</td>
+                        <td className="px-3 py-1.5 font-semibold text-right whitespace-nowrap">
+                          ${Number(f.total || 0).toLocaleString('es-CO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        </td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </CardContent>
+      </Card>
 
       {facturasFiltradas.length === 0 ? (
         <Card>
