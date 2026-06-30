@@ -181,16 +181,19 @@ async function procesarCuenta(cuenta) {
   if (!cuenta.pass) { log(`⚠️  ${cuenta.nombre}: sin contraseña`); return 0 }
   log(`Procesando ${cuenta.nombre}...`)
 
-  // Paso 1: buscar todos los no leídos con adjuntos
+  // Paso 1: buscar no leídos con adjuntos de los últimos 90 días.
+  // El histórico más viejo (años de correos no leídos) ya no se reintenta en
+  // cada corrida automática — eso era lo que saturaba la conexión IMAP.
+  const DIAS_ATRAS = 90
+  const desde = new Date(Date.now() - DIAS_ATRAS * 24 * 60 * 60 * 1000)
   const client = crearCliente(cuenta)
   let uidsConFactura = []
   try {
     await client.connect()
     await client.mailboxOpen('INBOX')
-    // Buscar NO leídos — sin restricción de fecha
-    const todosHoy = await client.search({ seen: false }, { uid: true })
-    if (todosHoy.length === 0) { log(`  ${cuenta.nombre}: sin correos no leídos`); await client.logout(); return 0 }
-    log(`  ${cuenta.nombre}: ${todosHoy.length} correo(s) no leídos`)
+    const todosHoy = await client.search({ seen: false, since: desde }, { uid: true })
+    if (todosHoy.length === 0) { log(`  ${cuenta.nombre}: sin correos no leídos en los últimos ${DIAS_ATRAS} días`); await client.logout(); return 0 }
+    log(`  ${cuenta.nombre}: ${todosHoy.length} correo(s) no leídos (últimos ${DIAS_ATRAS} días)`)
 
     // Escanear estructura en lotes de 200 para no saturar la conexión
     const LOTE_SCAN = 200
