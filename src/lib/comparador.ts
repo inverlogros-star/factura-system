@@ -759,10 +759,11 @@ export function encontrarReciboPorFactura(
     if (r) return r
   }
 
-  // ── PASO 2: solo número de factura (sin NIT) — cuando el NIT no está disponible ─
-  // IMPORTANTE: solo si el número de factura es suficientemente largo (> 2 dígitos)
-  // para evitar falsos positivos con números cortos como "10", "20"
-  if (digitos4) {
+  // ── PASO 2: solo número de factura — SOLO cuando el NIT NO está disponible ───
+  // Si hay NIT en la factura pero no coincidió con ningún recibo en el Paso 1,
+  // NO se debe ignorar el NIT y cruzar por número de factura solo — eso mezcla
+  // proveedores distintos que por coincidencia comparten los mismos 4 dígitos.
+  if (digitos4 && nitFact.length < 6) {
     const numFact = parseInt(digitos4.replace(/^0+/, '') || '0', 10)
     if (numFact >= 100) {  // mínimo 3 dígitos significativos para este paso
       const r = recibos.find(r =>
@@ -793,9 +794,11 @@ export function encontrarReciboPorFactura(
     }
   }
 
-  // ── PASO 4: Nombre del proveedor — 2+ palabras significativas + prefijo NIT ──
-  // Igual que el paso 3: descartar candidatos con No.Factura propio que no coincide
-  if (factura.proveedor && nitFact.length >= 4) {
+  // ── PASO 4: Nombre del proveedor — 2+ palabras significativas + NIT FUERTE ──
+  // El NIT debe coincidir en al menos 8 dígitos (NIT casi completo), NUNCA solo
+  // un prefijo corto de 4 dígitos — eso causa falsos positivos entre empresas
+  // distintas que por coincidencia empiezan igual (ej. ARICER vs MEGAMARKET).
+  if (factura.proveedor && nitFact.length >= 8) {
     const palabrasFact = palabrasSignificativas(factura.proveedor)
     if (palabrasFact.length >= 1) {
       const r = recibos.find(r => {
@@ -803,9 +806,8 @@ export function encontrarReciboPorFactura(
         const tieneNoFacturaPropio = !!(r.numeroFacturaProveedor || '').trim()
         if (tieneNoFacturaPropio && !noFacturaCoincide(r.numeroFacturaProveedor || '', digitos4)) return false
         const nitRec = normalizarNIT(r.nitProveedor || '')
-        if (nitRec.length >= 4 &&
-            !nitRec.startsWith(nitFact.slice(0, 4)) &&
-            !nitFact.startsWith(nitRec.slice(0, 4))) return false
+        // NIT debe coincidir en (casi) su totalidad — mínimo 8 dígitos exactos
+        if (nitRec.length < 8 || nitRec.slice(0, 8) !== nitFact.slice(0, 8)) return false
         const palabrasRec = palabrasSignificativas(r.proveedor)
         const comunes = palabrasFact.filter(p =>
           palabrasRec.some(rp => rp === p || rp.startsWith(p) || p.startsWith(rp))
@@ -816,18 +818,8 @@ export function encontrarReciboPorFactura(
     }
   }
 
-  // ── PASO 5: Único recibo total + NIT coincide en prefijo ────────────────────
-  // Descartar si el recibo tiene No.Factura propio que no coincide (es de otra factura)
-  if (recibos.length === 1 && nitFact.length >= 4) {
-    const candidato = recibos[0]
-    const tieneNoFacturaPropio = !!(candidato.numeroFacturaProveedor || '').trim()
-    if (!tieneNoFacturaPropio || noFacturaCoincide(candidato.numeroFacturaProveedor || '', digitos4)) {
-      const nitRec = normalizarNIT(candidato.nitProveedor || '')
-      if (nitRec.startsWith(nitFact.slice(0, 4)) || nitFact.startsWith(nitRec.slice(0, 4))) {
-        return candidato
-      }
-    }
-  }
-
+  // Sin coincidencia confiable — mejor dejar sin recibo que cruzar mal
+  // (NUNCA usar solo "único recibo disponible" o prefijos cortos de NIT: eso
+  // ha causado cruces entre proveedores distintos como ARICER vs MEGAMARKET)
   return undefined
 }
