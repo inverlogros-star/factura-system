@@ -306,6 +306,11 @@ export default function ComparacionPage() {
   const [fechaHasta, setFechaHasta]   = useState(hoyStr)
   const [panelAbierto, setPanelAbierto] = useState<ResultadoComparacion | null>(null)
   const [reciboDelPanel, setReciboDelPanel] = useState<ReciboMercancia | undefined>(undefined)
+  // Modal de eliminación de comparaciones por rango de fechas
+  const [modalBorrarRango, setModalBorrarRango] = useState(false)
+  const [borrarDesde, setBorrarDesde] = useState('')
+  const [borrarHasta, setBorrarHasta] = useState('')
+  const [borrando, setBorrando]       = useState(false)
 
   const recargar = async () => {
     const [fs, rs, cs] = await Promise.all([storeFacturas.getAll(), storeRecibos.getAll(), storeComparaciones.getAll()])
@@ -400,6 +405,26 @@ export default function ComparacionPage() {
     toast.success('Comparación eliminada — factura vuelve a Pendiente')
   }
 
+  async function eliminarComparacionesPorRango() {
+    if (!borrarDesde || !borrarHasta) { toast.error('Selecciona ambas fechas'); return }
+    if (borrarDesde > borrarHasta) { toast.error('Fecha inicial no puede ser mayor a la final'); return }
+    setBorrando(true)
+    try {
+      const res = await fetch('/api/comparaciones/eliminar-rango', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ desde: borrarDesde, hasta: borrarHasta }),
+      })
+      const data = await res.json()
+      if (data.error) { toast.error(data.error); return }
+      toast.success(`${data.eliminados} comparación(es) eliminada(s) del ${borrarDesde} al ${borrarHasta} — facturas vuelven a Pendiente`)
+      setModalBorrarRango(false)
+      setBorrarDesde(''); setBorrarHasta('')
+      await recargar()
+    } catch { toast.error('Error al eliminar') }
+    finally { setBorrando(false) }
+  }
+
   // Filtrar y separar facturas con/sin recibo
   const facturasFiltradas = useMemo(() => {
     const q = busqueda.trim().toLowerCase()
@@ -460,6 +485,18 @@ export default function ComparacionPage() {
             >
               <RefreshCw size={15} className="mr-1.5" />
               Limpiar y reconsolidar ({yaComparadas})
+            </Button>
+          )}
+          {/* Eliminar comparaciones por rango de fechas */}
+          {yaComparadas > 0 && (
+            <Button
+              variant="outline"
+              className="border-red-300 text-red-600 hover:bg-red-50"
+              disabled={procesando}
+              onClick={() => setModalBorrarRango(true)}
+            >
+              <Trash2 size={15} className="mr-1.5" />
+              Eliminar por fechas
             </Button>
           )}
           {/* Comparar todo en un clic */}
@@ -648,6 +685,76 @@ export default function ComparacionPage() {
           onClose={() => { setPanelAbierto(null); setReciboDelPanel(undefined) }}
           onEliminar={() => eliminarComparacion(panelAbierto.id, panelAbierto.facturaId)}
         />
+      )}
+
+      {/* ── Modal de eliminación de comparaciones por rango de fechas ── */}
+      {modalBorrarRango && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+          <div className="bg-white rounded-2xl shadow-2xl p-8 w-full max-w-md mx-4">
+            {/* Encabezado */}
+            <div className="flex items-center gap-3 mb-6">
+              <div className="p-3 bg-red-100 rounded-full">
+                <Trash2 size={24} className="text-red-600" />
+              </div>
+              <div>
+                <h2 className="text-lg font-bold text-gray-900">Eliminar Comparaciones por Fechas</h2>
+                <p className="text-sm text-gray-500">Las facturas del rango volverán a estado Pendiente</p>
+              </div>
+            </div>
+
+            {/* Calendarios */}
+            <div className="space-y-4 mb-6">
+              <div className="space-y-1.5">
+                <label className="text-sm font-semibold text-gray-700 flex items-center gap-1.5">
+                  Fecha inicial
+                </label>
+                <input
+                  type="date"
+                  value={borrarDesde}
+                  onChange={e => setBorrarDesde(e.target.value)}
+                  className="w-full border-2 border-gray-200 rounded-lg px-4 py-2.5 text-sm focus:outline-none focus:border-red-400 bg-white cursor-pointer font-medium"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <label className="text-sm font-semibold text-gray-700 flex items-center gap-1.5">
+                  Fecha final
+                </label>
+                <input
+                  type="date"
+                  value={borrarHasta}
+                  onChange={e => setBorrarHasta(e.target.value)}
+                  className="w-full border-2 border-gray-200 rounded-lg px-4 py-2.5 text-sm focus:outline-none focus:border-red-400 bg-white cursor-pointer font-medium"
+                />
+              </div>
+            </div>
+
+            {/* Resumen */}
+            <div className="bg-red-50 border border-red-200 rounded-lg px-4 py-3 mb-6">
+              <p className="text-sm text-red-700 font-medium">
+                ⚠️ Se eliminarán las comparaciones realizadas del <strong>{borrarDesde || '…'}</strong> al <strong>{borrarHasta || '…'}</strong>
+              </p>
+              <p className="text-xs text-red-500 mt-1">Las facturas afectadas vuelven a Pendiente. Esta acción no se puede deshacer.</p>
+            </div>
+
+            {/* Botones */}
+            <div className="flex gap-3">
+              <button
+                onClick={() => setModalBorrarRango(false)}
+                disabled={borrando}
+                className="flex-1 px-4 py-2.5 rounded-lg border-2 border-gray-300 text-gray-700 font-semibold hover:bg-gray-50 transition-colors"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={eliminarComparacionesPorRango}
+                disabled={borrando}
+                className="flex-1 px-4 py-2.5 rounded-lg bg-red-600 text-white font-semibold hover:bg-red-700 transition-colors disabled:opacity-50"
+              >
+                {borrando ? 'Eliminando...' : 'Eliminar comparaciones'}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   )
