@@ -146,28 +146,35 @@ async function guardarAdjunto(adjunto, descargados, cuentaNombre) {
   }
 }
 
-// Descarga UN solo mensaje usando una conexión dedicada
-async function descargarMensaje(cuenta, uid) {
-  const client = crearCliente(cuenta)
-  try {
-    await client.connect()
-    await client.mailboxOpen('INBOX')
-    const descargados = { count: 0 }
-    for await (const msg of client.fetch([uid], { source: true, uid: true }, { uid: true })) {
-      const parsed = await simpleParser(msg.source)
-      for (const adj of (parsed.attachments || [])) {
-        await guardarAdjunto(adj, descargados, cuenta.nombre)
+// Descarga un mensaje reutilizando una conexión ya abierta.
+// Devuelve { count, client } — si la conexión se cae, reconecta y la devuelve actualizada.
+async function descargarMensajeConConexion(cuenta, uid, client) {
+  for (let intento = 1; intento <= 3; intento++) {
+    try {
+      const descargados = { count: 0 }
+      for await (const msg of client.fetch([uid], { source: true, uid: true }, { uid: true })) {
+        const parsed = await simpleParser(msg.source)
+        for (const adj of (parsed.attachments || [])) {
+          await guardarAdjunto(adj, descargados, cuenta.nombre)
+        }
+        try { await client.messageFlagsAdd({ uid: msg.uid }, ['\\Seen'], { uid: true }) } catch {}
       }
-      // Marcar como leído
-      try { await client.messageFlagsAdd({ uid: msg.uid }, ['\\Seen'], { uid: true }) } catch {}
+      return { count: descargados.count, client }
+    } catch (err) {
+      log(`  ⚠️  uid ${uid} intento ${intento}/3: ${err.message}`)
+      try { await client.logout() } catch {}
+      await esperar(2000 * intento)
+      client = crearCliente(cuenta)
+      try {
+        await client.connect()
+        await client.mailboxOpen('INBOX')
+      } catch (e2) {
+        log(`  ❌ No se pudo reconectar: ${e2.message}`)
+        return { count: 0, client }
+      }
     }
-    await client.logout()
-    return descargados.count
-  } catch (err) {
-    log(`  ⚠️  Error descargando uid ${uid}: ${err.message}`)
-    try { await client.logout() } catch {}
-    return 0
   }
+  return { count: 0, client }
 }
 
 async function procesarCuenta(cuenta) {
@@ -209,14 +216,35 @@ async function procesarCuenta(cuenta) {
   if (uidsConFactura.length === 0) { log(`  ${cuenta.nombre}: ningún correo con facturas`); return 0 }
   log(`  ${cuenta.nombre}: ${uidsConFactura.length} correo(s) con facturas`)
 
-  // Paso 2: descargar cada mensaje con conexión propia
+  // Paso 2: descargar reutilizando UNA conexión persistente (reconecta solo si falla).
+  // Antes se abría/cerraba una conexión IMAP por cada mensaje, lo que saturaba el
+  // límite de conexiones de Zoho y causaba "Connection not available" en cascada.
   let total = 0
-  for (let i = 0; i < uidsConFactura.length; i++) {
-    const uid = uidsConFactura[i]
-    total += await descargarMensaje(cuenta, uid)
-    // Pequeña pausa entre mensajes para no saturar Zoho
-    if (i < uidsConFactura.length - 1) await esperar(1500)
+  let clientDescarga = crearCliente(cuenta)
+  try {
+    await clientDescarga.connect()
+    await clientDescarga.mailboxOpen('INBOX')
+  } catch (e) {
+    log(`  ❌ Error conectando para descarga: ${e.message}`)
+    return total
   }
+
+  const INICIO = Date.now()
+  const LIMITE_MS = 40 * 60 * 1000  // máx. 40 min por cuenta para no bloquear la próxima ejecución
+
+  for (let i = 0; i < uidsConFactura.length; i++) {
+    if (Date.now() - INICIO > LIMITE_MS) {
+      log(`  ⏱  Límite de tiempo alcanzado (40 min) — continuará en la próxima ejecución (${i}/${uidsConFactura.length} procesados)`)
+      break
+    }
+    const uid = uidsConFactura[i]
+    const resultado = await descargarMensajeConConexion(cuenta, uid, clientDescarga)
+    clientDescarga = resultado.client
+    total += resultado.count
+    if (i > 0 && i % 50 === 0) log(`  ${cuenta.nombre}: ${i}/${uidsConFactura.length} procesados, ${total} descargados`)
+    await esperar(400)  // pausa breve entre mensajes (ya no hay overhead de reconexión)
+  }
+  try { await clientDescarga.logout() } catch {}
   return total
 }
 
