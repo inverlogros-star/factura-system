@@ -30,10 +30,10 @@ const nav = [
 export default function Sidebar() {
   const path = usePathname()
   return (
-    <aside className="w-64 bg-white border-r border-gray-200 flex flex-col">
-      <div className="p-6 border-b border-gray-200">
-        <h1 className="text-xl font-bold text-blue-700">PACARDYL</h1>
-        <p className="text-xs text-gray-500 mt-1">Gestión de Facturas</p>
+    <aside className="w-64 bg-gradient-to-b from-blue-700 via-indigo-700 to-violet-800 border-r border-indigo-900/20 flex flex-col shadow-xl">
+      <div className="p-6 border-b border-white/15">
+        <h1 className="text-2xl font-extrabold tracking-tight text-white drop-shadow-sm">PACARDYL</h1>
+        <p className="text-xs font-semibold mt-1 text-amber-300">Gestión de Facturas</p>
       </div>
       <nav className="flex-1 p-4 space-y-1">
         {nav.map(({ href, label, icon: Icon }) => (
@@ -43,12 +43,8 @@ export default function Sidebar() {
             className={cn(
               'flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors',
               path === href
-                ? href === '/notas-pos'
-                  ? 'bg-orange-50 text-orange-700'
-                  : href === '/comprobante'
-                  ? 'bg-indigo-50 text-indigo-700'
-                  : 'bg-blue-50 text-blue-700'
-                : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900'
+                ? 'bg-white text-indigo-800 shadow-md font-semibold'
+                : 'text-indigo-100 hover:bg-white/15 hover:text-white'
             )}
           >
             <Icon size={18} />
@@ -57,8 +53,8 @@ export default function Sidebar() {
           </Link>
         ))}
       </nav>
-      <div className="p-4 border-t border-gray-200">
-        <p className="text-xs text-gray-400 text-center">Facturas DIAN · Colombia</p>
+      <div className="p-4 border-t border-white/15">
+        <p className="text-xs text-indigo-200 text-center">Facturas DIAN · Colombia</p>
       </div>
     </aside>
   )

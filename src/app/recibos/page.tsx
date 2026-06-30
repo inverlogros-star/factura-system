@@ -173,10 +173,10 @@ export default function RecibosPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between rounded-2xl bg-gradient-to-r from-emerald-600 to-teal-600 p-6 shadow-lg flex-wrap gap-3">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Recibos de Mercancía</h1>
-          <p className="text-gray-500 text-sm mt-1">Carga recibos en XML, Excel, PDF o importa desde el sistema</p>
+          <h1 className="text-2xl font-extrabold text-white drop-shadow-sm">Recibos de Mercancía</h1>
+          <p className="text-emerald-100 text-sm mt-1">Carga recibos en XML, Excel, PDF o importa desde el sistema</p>
         </div>
         <div className="flex gap-2 flex-wrap">
           {marcados.size > 0 && (

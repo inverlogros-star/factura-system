@@ -107,11 +107,11 @@ export default function ReportePage() {
   return (
     <div className="space-y-6">
       {/* Encabezado */}
-      <div>
-        <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
-          <BarChart3 size={24} className="text-blue-600" /> Reporte por Rango de Fechas
+      <div className="rounded-2xl bg-gradient-to-r from-cyan-600 to-blue-600 p-6 shadow-lg">
+        <h1 className="text-2xl font-extrabold text-white drop-shadow-sm flex items-center gap-2">
+          <BarChart3 size={24} /> Reporte por Rango de Fechas
         </h1>
-        <p className="text-gray-500 text-sm mt-1">Resumen de facturas, recibos y comparaciones en el período seleccionado</p>
+        <p className="text-cyan-100 text-sm mt-1">Resumen de facturas, recibos y comparaciones en el período seleccionado</p>
       </div>
 
       {/* Selector de fechas */}

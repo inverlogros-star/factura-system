@@ -461,10 +461,10 @@ export default function ComparacionPage() {
   return (
     <div className="space-y-5">
       {/* Encabezado */}
-      <div className="flex items-center justify-between flex-wrap gap-3">
+      <div className="flex items-center justify-between flex-wrap gap-3 rounded-2xl bg-gradient-to-r from-indigo-600 to-purple-600 p-6 shadow-lg">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Comparación de Documentos</h1>
-          <p className="text-gray-500 text-sm mt-1">
+          <h1 className="text-2xl font-extrabold text-white drop-shadow-sm">Comparación de Documentos</h1>
+          <p className="text-indigo-100 text-sm mt-1">
             Coteja facturas DIAN con recibos de mercancía usando los últimos 4 dígitos
           </p>
         </div>

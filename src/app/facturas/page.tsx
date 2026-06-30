@@ -119,10 +119,10 @@ export default function FacturasPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between rounded-2xl bg-gradient-to-r from-blue-600 to-cyan-600 p-6 shadow-lg flex-wrap gap-3">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Facturas Electrónicas</h1>
-          <p className="text-gray-500 text-sm mt-1">Importa XML DIAN para conciliar con recibos</p>
+          <h1 className="text-2xl font-extrabold text-white drop-shadow-sm">Facturas Electrónicas</h1>
+          <p className="text-blue-100 text-sm mt-1">Importa XML DIAN para conciliar con recibos</p>
         </div>
         <div className="flex gap-2">
           {marcadas.size > 0 && (

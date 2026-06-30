@@ -15,7 +15,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="es">
       <body className={inter.className}>
-        <div className="flex h-screen bg-gray-50">
+        <div className="flex h-screen bg-gradient-to-br from-sky-50 via-violet-50 to-emerald-50">
           <Sidebar />
           <main className="flex-1 overflow-auto p-6">{children}</main>
         </div>
