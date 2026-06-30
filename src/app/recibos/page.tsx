@@ -2,12 +2,13 @@
 import { useEffect, useRef, useState, useMemo } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
-import { Upload, Trash2, PackageCheck, Eye, FileSpreadsheet, FileText, FileCode, Bug, CheckSquare, Square, Database, CalendarIcon, BarChart2, ChevronDown, ChevronUp, CalendarX2 } from 'lucide-react'
+import { Upload, Trash2, PackageCheck, Eye, FileSpreadsheet, FileText, FileCode, Bug, CheckSquare, Square, Database, CalendarIcon, BarChart2, ChevronDown, ChevronUp, CalendarX2, FileDown } from 'lucide-react'
 import { fmtRecibo } from '@/lib/utils'
 import { parsearReciboXML } from '@/lib/parser-dian'
 import { parsearReciboExcel } from '@/lib/parser-recibo-excel'
 import { parsearReciboPDF } from '@/lib/parser-recibo-pdf'
 import { storeRecibos } from '@/lib/store'
+import { generarInformeRecibosPDF } from '@/lib/informe-recibos-pdf'
 import type { ReciboMercancia } from '@/types'
 import { toast } from 'sonner'
 import DetalleRecibo from '@/components/DetalleRecibo'
@@ -32,6 +33,10 @@ export default function RecibosPage() {
   const [borrarHasta, setBorrarHasta] = useState(hoy())
   const [borrando, setBorrando]       = useState(false)
   const [mostrarContador, setMostrarContador] = useState(true)
+  // Informe de recibos por rango de fechas
+  const [informeDesde, setInformeDesde] = useState(primerDiaMes())
+  const [informeHasta, setInformeHasta] = useState(hoy())
+  const [generandoInforme, setGenerandoInforme] = useState(false)
 
   // Agrupar recibos por fecha para el contador diario
   const contadorPorDia = useMemo(() => {
@@ -54,6 +59,27 @@ export default function RecibosPage() {
         proveedores: data.proveedores.size,
       }))
   }, [recibos])
+
+  // Recibos dentro del rango del informe
+  const recibosInforme = useMemo(() => {
+    return recibos
+      .filter(r => {
+        const f = (r.fecha || '').slice(0, 10)
+        return f >= informeDesde && f <= informeHasta
+      })
+      .sort((a, b) => (a.fecha || '').localeCompare(b.fecha || ''))
+  }, [recibos, informeDesde, informeHasta])
+  const totalInforme = recibosInforme.reduce((s, r) => s + Number(r.total || 0), 0)
+
+  async function descargarInformePDF() {
+    if (recibosInforme.length === 0) { toast.error('No hay recibos en el rango seleccionado'); return }
+    setGenerandoInforme(true)
+    try {
+      await generarInformeRecibosPDF(recibosInforme, informeDesde, informeHasta)
+      toast.success(`Informe generado: ${recibosInforme.length} recibo(s)`)
+    } catch (e) { toast.error(`Error generando PDF: ${(e as Error).message}`) }
+    finally { setGenerandoInforme(false) }
+  }
 
   // Importación desde BD
   const [fechaInicio, setFechaInicio] = useState(primerDiaMes())
@@ -232,6 +258,84 @@ export default function RecibosPage() {
           <p className="text-xs text-gray-400 mt-3">
             ℹ️ Requiere el servidor local corriendo (<code className="bg-gray-100 px-1 rounded">iniciar-servidor.bat</code>). Al hacer clic verifica automáticamente si está activo.
           </p>
+        </CardContent>
+      </Card>
+
+      {/* ── Informe de Recibos por Rango de Fechas (PDF) ──────────────────── */}
+      <Card className="border-emerald-200 bg-emerald-50/40">
+        <CardHeader className="pb-3">
+          <CardTitle className="text-base flex items-center gap-2">
+            <FileDown size={18} className="text-emerald-600" />
+            Informe de Recibos de Mercancía (PDF)
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="flex flex-wrap gap-4 items-end">
+            <div className="space-y-1">
+              <label className="text-xs font-semibold text-gray-600 flex items-center gap-1">
+                <CalendarIcon size={12} /> Fecha inicial
+              </label>
+              <input
+                type="date"
+                value={informeDesde}
+                onChange={e => setInformeDesde(e.target.value)}
+                className="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-400 bg-white cursor-pointer"
+              />
+            </div>
+            <div className="space-y-1">
+              <label className="text-xs font-semibold text-gray-600 flex items-center gap-1">
+                <CalendarIcon size={12} /> Fecha final
+              </label>
+              <input
+                type="date"
+                value={informeHasta}
+                onChange={e => setInformeHasta(e.target.value)}
+                className="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-400 bg-white cursor-pointer"
+              />
+            </div>
+            <div className="text-sm text-gray-600">
+              <span className="bg-emerald-100 text-emerald-700 px-3 py-1.5 rounded-full font-medium">
+                {recibosInforme.length} recibo(s) · ${totalInforme.toLocaleString('es-CO', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
+              </span>
+            </div>
+            <Button
+              onClick={descargarInformePDF}
+              disabled={generandoInforme || recibosInforme.length === 0}
+              className="bg-emerald-700 hover:bg-emerald-800"
+            >
+              <FileDown size={16} className="mr-2" />
+              {generandoInforme ? 'Generando...' : 'Generar PDF'}
+            </Button>
+          </div>
+
+          {/* Vista previa */}
+          {recibosInforme.length > 0 && (
+            <div className="mt-4 border rounded-lg overflow-hidden max-h-64 overflow-y-auto">
+              <table className="w-full text-xs">
+                <thead className="bg-emerald-100 text-emerald-800 sticky top-0">
+                  <tr>
+                    {['Fecha', 'No. Recibo', 'No. Factura', 'Proveedor', 'NIT Proveedor', 'Valor Total'].map(h => (
+                      <th key={h} className="text-left px-3 py-2 font-semibold whitespace-nowrap">{h}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-100 bg-white">
+                  {recibosInforme.map(r => (
+                    <tr key={r.id} className="hover:bg-emerald-50">
+                      <td className="px-3 py-1.5 text-gray-500 whitespace-nowrap">{r.fecha || '—'}</td>
+                      <td className="px-3 py-1.5 font-mono font-semibold whitespace-nowrap">{fmtRecibo(r.numeroRecibo)}</td>
+                      <td className="px-3 py-1.5 font-mono whitespace-nowrap">{r.numeroFacturaProveedor || '—'}</td>
+                      <td className="px-3 py-1.5">{r.proveedor || '—'}</td>
+                      <td className="px-3 py-1.5 text-gray-500 whitespace-nowrap">{r.nitProveedor || '—'}</td>
+                      <td className="px-3 py-1.5 font-semibold text-right whitespace-nowrap">
+                        ${Number(r.total || 0).toLocaleString('es-CO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
         </CardContent>
       </Card>
 
