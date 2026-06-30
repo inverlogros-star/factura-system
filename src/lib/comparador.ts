@@ -773,22 +773,35 @@ export function encontrarReciboPorFactura(
   }
 
   // ── PASO 3: NIT exacto — SOLO si hay un único recibo de ese NIT ──────────────
-  // Si hay varios recibos del mismo proveedor, NO elegir arbitrariamente
+  // Si hay varios recibos del mismo proveedor, NO elegir arbitrariamente.
+  // IMPORTANTE: si el único recibo del NIT ya tiene un No. Factura propio que NO
+  // coincide con esta factura, significa que pertenece a OTRA factura — no usarlo.
   if (nitFact.length >= 8) {
     const delMismoNIT = recibos.filter(r => {
       const nitRec = normalizarNIT(r.nitProveedor || '')
       return nitRec.length >= 8 && nitRec.slice(0, 8) === nitFact.slice(0, 8)
     })
-    if (delMismoNIT.length === 1) return delMismoNIT[0]
-    // Si hay varios del mismo NIT, no elegir ninguno por NIT solo (evita cruces equivocados)
+    if (delMismoNIT.length === 1) {
+      const candidato = delMismoNIT[0]
+      const tieneNoFacturaPropio = !!(candidato.numeroFacturaProveedor || '').trim()
+      // Solo usar el fallback por NIT si el recibo NO tiene No.Factura propio,
+      // o si su No.Factura coincide con esta factura (ya cubierto por paso 1/2)
+      if (!tieneNoFacturaPropio || noFacturaCoincide(candidato.numeroFacturaProveedor || '', digitos4)) {
+        return candidato
+      }
+      // Tiene No.Factura propio y NO coincide → pertenece a otra factura, no usar
+    }
   }
 
   // ── PASO 4: Nombre del proveedor — 2+ palabras significativas + prefijo NIT ──
+  // Igual que el paso 3: descartar candidatos con No.Factura propio que no coincide
   if (factura.proveedor && nitFact.length >= 4) {
     const palabrasFact = palabrasSignificativas(factura.proveedor)
     if (palabrasFact.length >= 1) {
       const r = recibos.find(r => {
         if (!r.proveedor) return false
+        const tieneNoFacturaPropio = !!(r.numeroFacturaProveedor || '').trim()
+        if (tieneNoFacturaPropio && !noFacturaCoincide(r.numeroFacturaProveedor || '', digitos4)) return false
         const nitRec = normalizarNIT(r.nitProveedor || '')
         if (nitRec.length >= 4 &&
             !nitRec.startsWith(nitFact.slice(0, 4)) &&
@@ -804,10 +817,15 @@ export function encontrarReciboPorFactura(
   }
 
   // ── PASO 5: Único recibo total + NIT coincide en prefijo ────────────────────
+  // Descartar si el recibo tiene No.Factura propio que no coincide (es de otra factura)
   if (recibos.length === 1 && nitFact.length >= 4) {
-    const nitRec = normalizarNIT(recibos[0].nitProveedor || '')
-    if (nitRec.startsWith(nitFact.slice(0, 4)) || nitFact.startsWith(nitRec.slice(0, 4))) {
-      return recibos[0]
+    const candidato = recibos[0]
+    const tieneNoFacturaPropio = !!(candidato.numeroFacturaProveedor || '').trim()
+    if (!tieneNoFacturaPropio || noFacturaCoincide(candidato.numeroFacturaProveedor || '', digitos4)) {
+      const nitRec = normalizarNIT(candidato.nitProveedor || '')
+      if (nitRec.startsWith(nitFact.slice(0, 4)) || nitFact.startsWith(nitRec.slice(0, 4))) {
+        return candidato
+      }
     }
   }
 
