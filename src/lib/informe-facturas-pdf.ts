@@ -61,10 +61,13 @@ export async function generarInformeFacturasPDF(
   // ── ORDENAR por fecha ────────────────────────────────────────────────────────
   const ordenados = [...facturas].sort((a, b) => (a.fecha || '').localeCompare(b.fecha || ''))
 
-  // ── TABLA ───────────────────────────────────────────────────────────────────
+  // ── TABLA PRINCIPAL ─────────────────────────────────────────────────────────
   const filas = ordenados.map(f => {
     const recibo = f.reciboAsociadoId ? recibosPorId.get(f.reciboAsociadoId) : undefined
     const tipo = TIPO_LABEL[f.tipoDocumento || 'factura'] || f.tipoDocumento || 'Factura'
+    const correo = f.correoOrigen
+      ? f.correoOrigen.replace(/@.*/, '') // mostrar solo la parte local del correo
+      : '—'
     return [
       f.fecha || '—',
       tipo,
@@ -72,6 +75,7 @@ export async function generarInformeFacturasPDF(
       recibo ? fmtRecibo(recibo.numeroRecibo) : '—',
       f.proveedor || '—',
       f.nitProveedor || '—',
+      correo,
       `$${fmt(f.total)}`,
     ]
   })
@@ -83,21 +87,22 @@ export async function generarInformeFacturasPDF(
 
   autoTable(doc, {
     startY: 32,
-    head: [['Fecha', 'Tipo', 'No. Factura/Nota', 'No. Recibo', 'Proveedor', 'NIT Proveedor', 'Valor Total']],
+    head: [['Fecha', 'Tipo', 'No. Factura/Nota', 'No. Recibo', 'Proveedor', 'NIT Proveedor', 'Correo', 'Valor Total']],
     body: filas,
-    foot: [['', '', '', '', '', 'TOTAL GENERAL', `$${fmt(totalGeneral)}`]],
+    foot: [['', '', '', '', '', '', 'TOTAL GENERAL', `$${fmt(totalGeneral)}`]],
     theme: 'grid',
-    headStyles: { fillColor: [37, 99, 235], textColor: 255, fontStyle: 'bold', fontSize: 8.5 },
+    headStyles: { fillColor: [37, 99, 235], textColor: 255, fontStyle: 'bold', fontSize: 8 },
     footStyles: { fillColor: [219, 234, 254], textColor: [29, 78, 216], fontStyle: 'bold', fontSize: 9 },
-    bodyStyles: { fontSize: 7.8 },
+    bodyStyles: { fontSize: 7.5 },
     columnStyles: {
       0: { cellWidth: 22 },
-      1: { cellWidth: 24 },
-      2: { cellWidth: 30 },
-      3: { cellWidth: 26, fontStyle: 'bold' },
+      1: { cellWidth: 22 },
+      2: { cellWidth: 28 },
+      3: { cellWidth: 24 },
       4: { cellWidth: 'auto' },
-      5: { cellWidth: 30 },
-      6: { cellWidth: 30, halign: 'right', fontStyle: 'bold' },
+      5: { cellWidth: 28 },
+      6: { cellWidth: 28 },
+      7: { cellWidth: 28, halign: 'right', fontStyle: 'bold' },
     },
     margin: { left: 14, right: 14 },
     didDrawPage: () => {
@@ -111,14 +116,97 @@ export async function generarInformeFacturasPDF(
     },
   })
 
-  // ── RESUMEN FINAL ───────────────────────────────────────────────────────────
-  const finalY = (doc as any).lastAutoTable.finalY + 8
+  // ── RESUMEN POR TOTALES ─────────────────────────────────────────────────────
+  let finalY = (doc as any).lastAutoTable.finalY + 8
   doc.setFontSize(9)
   doc.setFont('helvetica', 'bold')
   doc.setTextColor(29, 78, 216)
   doc.text(`Total documentos: ${ordenados.length}`, 14, finalY)
   doc.text(`Facturas: ${totalFacturas.length}  |  Notas Crédito: ${totalNotasCredito.length}  |  Notas Débito: ${totalNotasDebito.length}`, 14, finalY + 6)
   doc.text(`Valor total: $${fmt(totalGeneral)}`, 14, finalY + 12)
+
+  // ── DASHBOARD: DOCUMENTOS POR CORREO ────────────────────────────────────────
+  // Verificar espacio disponible en página actual
+  const pageH = doc.internal.pageSize.getHeight()
+  if (finalY + 60 > pageH - 20) {
+    doc.addPage()
+    finalY = 20
+  } else {
+    finalY += 22
+  }
+
+  // Construir estadísticas por correo
+  type EstCorreo = { correo: string; facturas: number; notasCredito: number; notasDebito: number; total: number }
+  const correoMap = new Map<string, EstCorreo>()
+
+  for (const f of ordenados) {
+    const key = f.correoOrigen || '(sin correo)'
+    if (!correoMap.has(key)) {
+      correoMap.set(key, { correo: key, facturas: 0, notasCredito: 0, notasDebito: 0, total: 0 })
+    }
+    const est = correoMap.get(key)!
+    const tipo = f.tipoDocumento || 'factura'
+    if (tipo === 'factura')           est.facturas++
+    else if (tipo === 'nota_credito') est.notasCredito++
+    else if (tipo === 'nota_debito')  est.notasDebito++
+    est.total += Number(f.total || 0)
+  }
+
+  const filasCorreo = [...correoMap.values()].sort((a, b) =>
+    (b.facturas + b.notasCredito + b.notasDebito) - (a.facturas + a.notasCredito + a.notasDebito)
+  )
+
+  // Encabezado dashboard
+  doc.setFillColor(15, 118, 110)
+  doc.rect(14, finalY, pageW - 28, 8, 'F')
+  doc.setTextColor(255, 255, 255)
+  doc.setFontSize(9)
+  doc.setFont('helvetica', 'bold')
+  doc.text('DASHBOARD — DOCUMENTOS RECIBIDOS POR CORREO ELECTRÓNICO', 14 + (pageW - 28) / 2, finalY + 5.5, { align: 'center' })
+  doc.setTextColor(0, 0, 0)
+
+  autoTable(doc, {
+    startY: finalY + 10,
+    head: [['Cuenta de Correo', 'Facturas', 'Notas Crédito', 'Notas Débito', 'Total Docs.', 'Valor Total']],
+    body: filasCorreo.map(e => [
+      e.correo,
+      e.facturas.toString(),
+      e.notasCredito.toString(),
+      e.notasDebito.toString(),
+      (e.facturas + e.notasCredito + e.notasDebito).toString(),
+      `$${fmt(e.total)}`,
+    ]),
+    foot: [[
+      'TOTAL',
+      totalFacturas.length.toString(),
+      totalNotasCredito.length.toString(),
+      totalNotasDebito.length.toString(),
+      ordenados.length.toString(),
+      `$${fmt(totalGeneral)}`,
+    ]],
+    theme: 'grid',
+    headStyles: { fillColor: [15, 118, 110], textColor: 255, fontStyle: 'bold', fontSize: 8.5 },
+    footStyles: { fillColor: [209, 250, 229], textColor: [6, 95, 70], fontStyle: 'bold', fontSize: 9 },
+    bodyStyles: { fontSize: 8 },
+    columnStyles: {
+      0: { cellWidth: 'auto' },
+      1: { cellWidth: 28, halign: 'center', fontStyle: 'bold' },
+      2: { cellWidth: 32, halign: 'center', fontStyle: 'bold' },
+      3: { cellWidth: 32, halign: 'center', fontStyle: 'bold' },
+      4: { cellWidth: 28, halign: 'center', fontStyle: 'bold' },
+      5: { cellWidth: 38, halign: 'right', fontStyle: 'bold' },
+    },
+    margin: { left: 14, right: 14 },
+    didDrawPage: () => {
+      const pageCount = doc.getNumberOfPages()
+      doc.setFontSize(8)
+      doc.setTextColor(150)
+      doc.text(
+        `Página ${doc.getCurrentPageInfo().pageNumber} de ${pageCount}`,
+        pageW - 14, doc.internal.pageSize.getHeight() - 8, { align: 'right' }
+      )
+    },
+  })
 
   const nombreArchivo = `Informe_Facturas_${desde}_a_${hasta}.pdf`
   doc.save(nombreArchivo)
