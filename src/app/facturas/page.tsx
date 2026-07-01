@@ -167,6 +167,25 @@ export default function FacturasPage() {
     return acc
   }, {} as Record<string, number>)
 
+  // Diagnóstico: facturas pendientes agrupadas por mes para saber qué recibos importar
+  const pendientesPorMes = useMemo(() => {
+    const mapa = new Map<string, { count: number; totalValor: number; minFecha: string; maxFecha: string }>()
+    const hoyMs = Date.now()
+    for (const f of facturas) {
+      if (f.estado !== 'pendiente' || !f.fecha) continue
+      const mes = f.fecha.slice(0, 7) // YYYY-MM
+      if (!mapa.has(mes)) mapa.set(mes, { count: 0, totalValor: 0, minFecha: f.fecha, maxFecha: f.fecha })
+      const m = mapa.get(mes)!
+      m.count++
+      m.totalValor += Number(f.total || 0)
+      if (f.fecha < m.minFecha) m.minFecha = f.fecha
+      if (f.fecha > m.maxFecha) m.maxFecha = f.fecha
+    }
+    return [...mapa.entries()]
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([mes, d]) => ({ mes, ...d }))
+  }, [facturas])
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between rounded-2xl bg-gradient-to-r from-blue-600 to-cyan-600 p-6 shadow-lg flex-wrap gap-3">
@@ -217,6 +236,42 @@ export default function FacturasPage() {
           </button>
         ))}
       </div>
+
+      {/* ── Diagnóstico: meses con facturas pendientes sin recibo ── */}
+      {pendientesPorMes.length > 0 && (
+        <Card className="border-orange-200 bg-orange-50/40">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm flex items-center gap-2 text-orange-700">
+              <span>⚠️</span> Facturas pendientes por mes — necesitan recibos de MySQL
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="pt-0">
+            <p className="text-xs text-orange-600 mb-3">
+              Para comparar estas facturas ve a <strong>Recibos</strong> → <strong>Importar desde MySQL</strong> y selecciona el rango de fechas correspondiente. Luego vuelve a <strong>Comparación</strong> y ejecuta <strong>Comparar todo</strong>.
+            </p>
+            <div className="flex flex-wrap gap-2">
+              {pendientesPorMes.map(({ mes, count, totalValor, minFecha, maxFecha }) => {
+                const [anio, mesNum] = mes.split('-')
+                const nombreMes = new Date(`${mes}-15`).toLocaleDateString('es-CO', { month: 'long', year: 'numeric' })
+                return (
+                  <div key={mes} className="bg-white border border-orange-200 rounded-xl px-4 py-2.5 shadow-sm">
+                    <p className="text-xs font-bold text-orange-800 capitalize">{nombreMes}</p>
+                    <p className="text-xs text-gray-600 mt-0.5">
+                      <span className="font-semibold text-orange-700">{count}</span> factura(s) pendiente(s)
+                    </p>
+                    <p className="text-xs text-gray-500">
+                      ${totalValor.toLocaleString('es-CO', { maximumFractionDigits: 0 })}
+                    </p>
+                    <p className="text-xs text-gray-400 mt-0.5">
+                      {minFecha === maxFecha ? minFecha : `${minFecha} → ${maxFecha}`}
+                    </p>
+                  </div>
+                )
+              })}
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* ── Informe de Facturas, Notas Crédito y Débito por Rango de Fechas (PDF) ── */}
       <Card className="border-blue-200 bg-blue-50/40">
@@ -347,7 +402,7 @@ export default function FacturasPage() {
                       {todasMarcadas ? <CheckSquare size={18} /> : <Square size={18} className="text-gray-400" />}
                     </button>
                   </th>
-                  {['No. Documento','Tipo','Proveedor','NIT','Fecha','Total','Estado','Correo origen',''].map(h => (
+                  {['No. Documento','Tipo','Proveedor','NIT','Fecha','Total','Estado','Días pend.','Correo origen',''].map(h => (
                     <th key={h} className="text-left px-3 py-3 font-medium text-gray-600">{h}</th>
                   ))}
                 </tr>
@@ -373,6 +428,17 @@ export default function FacturasPage() {
                     <td className="px-3 py-3 font-medium">${Number(f.total).toLocaleString('es-CO')}</td>
                     <td className="px-3 py-3">
                       <Badge variant={ESTADO_VARIANT[f.estado]}>{ESTADO_LABELS[f.estado]}</Badge>
+                    </td>
+                    <td className="px-3 py-3 text-xs">
+                      {(() => {
+                        if (f.estado !== 'pendiente') return <span className="text-gray-300">—</span>
+                        const dias = f.fecha
+                          ? Math.floor((Date.now() - new Date(f.fecha + 'T12:00:00').getTime()) / 86400000)
+                          : null
+                        if (dias === null) return <span className="text-gray-400">—</span>
+                        const color = dias >= 30 ? 'bg-red-100 text-red-700' : dias >= 7 ? 'bg-orange-100 text-orange-700' : 'bg-yellow-100 text-yellow-700'
+                        return <span className={`font-semibold px-2 py-0.5 rounded-full ${color}`}>{dias} día(s)</span>
+                      })()}
                     </td>
                     <td className="px-3 py-3 text-xs text-gray-500">
                       {f.correoOrigen
