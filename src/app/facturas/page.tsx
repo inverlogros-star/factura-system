@@ -3,7 +3,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { Upload, Trash2, FileText, Eye, CheckSquare, Square, Search, X, CalendarX2, FileDown, CalendarIcon } from 'lucide-react'
+import { Upload, Trash2, FileText, Eye, CheckSquare, Square, Search, X, CalendarX2, FileDown, CalendarIcon, RefreshCw } from 'lucide-react'
 import { parsearFacturaDIAN } from '@/lib/parser-dian'
 import { storeFacturas, storeRecibos } from '@/lib/store'
 import { generarInformeFacturasPDF } from '@/lib/informe-facturas-pdf'
@@ -53,6 +53,7 @@ export default function FacturasPage() {
   const [informeDesde, setInformeDesde] = useState(primerDiaMes())
   const [informeHasta, setInformeHasta] = useState(hoy())
   const [generandoInforme, setGenerandoInforme] = useState(false)
+  const [reprocesando, setReprocesando] = useState(false)
 
   const recargar = async () => {
     const [fs, rs] = await Promise.all([storeFacturas.getAll(), storeRecibos.getAll()])
@@ -113,6 +114,22 @@ export default function FacturasPage() {
     await recargar()
   }
 
+  async function reprocesarVacias() {
+    setReprocesando(true)
+    try {
+      const res = await fetch('/api/facturas/reprocesar', { method: 'POST' })
+      const data = await res.json()
+      if (data.error) { toast.error(data.error); return }
+      if (data.procesados === 0) {
+        toast.info(data.mensaje || 'No hay facturas pendientes de reprocesar')
+      } else {
+        toast.success(`${data.procesados} de ${data.total} factura(s) reprocesadas correctamente`)
+      }
+      await recargar()
+    } catch { toast.error('Error al reprocesar') }
+    finally { setReprocesando(false) }
+  }
+
   async function eliminarPorRango() {
     if (!borrarDesde || !borrarHasta) { toast.error('Selecciona ambas fechas'); return }
     if (borrarDesde > borrarHasta) { toast.error('Fecha inicial no puede ser mayor a la final'); return }
@@ -164,6 +181,16 @@ export default function FacturasPage() {
               Eliminar ({marcadas.size})
             </Button>
           )}
+          <Button
+            variant="outline"
+            onClick={reprocesarVacias}
+            disabled={reprocesando}
+            className="border-yellow-400 text-yellow-700 hover:bg-yellow-50 bg-white"
+            title="Reprocesa facturas que quedaron con datos vacíos (total=$0 o sin proveedor)"
+          >
+            <RefreshCw size={15} className={`mr-1.5 ${reprocesando ? 'animate-spin' : ''}`} />
+            {reprocesando ? 'Reprocesando...' : 'Reprocesar vacías'}
+          </Button>
           <Button
             variant="outline"
             onClick={() => setModalBorrarRango(true)}

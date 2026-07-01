@@ -76,10 +76,16 @@ async function extraerDocumento(xmlString: string): Promise<{ root: any; tipo: T
     const descNode = get(extRef, 'Description') || get(extRef, 'cbc:Description')
     const cdataContent = t(descNode)
 
-    if (cdataContent && cdataContent.includes('<?xml')) {
-      const innerParsed = await parseXML(cdataContent)
-      const innerKey = Object.keys(innerParsed)[0]
-      return { root: innerParsed[innerKey], tipo: detectarTipo(innerKey) }
+    // Algunos XMLs no incluyen declaración <?xml pero igual son válidos
+    const trimmedCdata = cdataContent.trim().replace(/^﻿/, '') // quitar BOM si existe
+    if (trimmedCdata && (trimmedCdata.startsWith('<?xml') || trimmedCdata.startsWith('<'))) {
+      try {
+        const innerParsed = await parseXML(trimmedCdata)
+        const innerKey = Object.keys(innerParsed)[0]
+        if (innerKey) return { root: innerParsed[innerKey], tipo: detectarTipo(innerKey) }
+      } catch {
+        // CDATA no era XML válido, continuar con documento raíz
+      }
     }
   }
 
@@ -125,25 +131,29 @@ export function esDestinatarioValido(nitCliente: string): boolean {
 }
 
 function extraerProveedor(root: any): { proveedor: string; nitProveedor: string } {
-  const supplierParty = get(root, 'AccountingSupplierParty', 'SellerSupplierParty')
-  const party = get(supplierParty, 'Party')
+  const supplierPartyNode = get(root, 'AccountingSupplierParty', 'SellerSupplierParty')
 
-  // Nombre
-  const partyName = get(party, 'PartyName')
+  // Algunos XMLs tienen Party anidado, otros colocan los datos directamente
+  const party = get(supplierPartyNode, 'Party') || supplierPartyNode
+
+  // Intentar también desde el nodo raíz (variante fe:)
+  const partyName   = get(party, 'PartyName')
   const legalEntity = get(party, 'PartyLegalEntity')
-  const taxScheme = get(party, 'PartyTaxScheme')
+  const taxScheme   = get(party, 'PartyTaxScheme')
 
   const proveedor =
     t(get(partyName, 'Name')) ||
     t(get(legalEntity, 'RegistrationName')) ||
     t(get(taxScheme, 'RegistrationName')) ||
+    t(get(party, 'Name')) ||
     ''
 
-  // NIT
+  // NIT — buscar en varios lugares posibles
   const companyId =
     get(taxScheme, 'CompanyID') ||
     get(legalEntity, 'CompanyID') ||
-    get(party, 'PartyIdentification', 'ID')
+    get(get(party, 'PartyIdentification'), 'ID') ||
+    get(party, 'PartyIdentification')
 
   const nitProveedor = t(companyId) || ''
 
@@ -161,11 +171,21 @@ function extraerLineas(root: any): ProductoFactura[] {
     const item = get(line, 'Item', 'cac:Item') || {}
     const price = get(line, 'Price', 'cac:Price') || {}
 
-    // Código del producto
-    const sellersId = get(get(item, 'SellersItemIdentification', 'cac:SellersItemIdentification'), 'ID', 'cbc:ID')
-    const standardId = get(get(item, 'StandardItemIdentification', 'cac:StandardItemIdentification'), 'ID', 'cbc:ID')
-    const buyersId = get(get(item, 'BuyersItemIdentification', 'cac:BuyersItemIdentification'), 'ID', 'cbc:ID')
-    const codigoItem = t(sellersId) || t(standardId) || t(buyersId) || t(get(line, 'ID', 'cbc:ID'))
+    // Código del producto — EAN/GTIN del proveedor
+    const sellersId  = get(get(item, 'SellersItemIdentification'),  'ID')
+    const standardId = get(get(item, 'StandardItemIdentification'), 'ID')
+    const buyersId   = get(get(item, 'BuyersItemIdentification'),   'ID')
+
+    // AdditionalItemIdentification: lista de identificadores extra (EAN, GTIN, etc.)
+    const additionalIds = getArr(item, 'AdditionalItemIdentification')
+    let additionalEAN = ''
+    for (const ai of additionalIds) {
+      const aiId = t(get(ai, 'ID'))
+      // Preferir el que luzca como EAN (8-14 dígitos numéricos)
+      if (aiId && aiId.length >= 8 && /^\d+$/.test(aiId)) { additionalEAN = aiId; break }
+    }
+
+    const codigoItem = t(sellersId) || t(standardId) || t(buyersId) || additionalEAN || t(get(line, 'ID'))
 
     // Descripción
     const descripcion =
