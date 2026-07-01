@@ -3,7 +3,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { Upload, Trash2, FileText, Eye, CheckSquare, Square, Search, X, CalendarX2, FileDown, CalendarIcon, RefreshCw } from 'lucide-react'
+import { Upload, Trash2, FileText, Eye, CheckSquare, Square, Search, X, CalendarX2, FileDown, CalendarIcon, RefreshCw, Receipt } from 'lucide-react'
 import { parsearFacturaDIAN } from '@/lib/parser-dian'
 import { storeFacturas, storeRecibos } from '@/lib/store'
 import { generarInformeFacturasPDF } from '@/lib/informe-facturas-pdf'
@@ -188,12 +188,13 @@ export default function FacturasPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between rounded-2xl bg-gradient-to-r from-blue-600 to-cyan-600 p-6 shadow-lg flex-wrap gap-3">
-        <div>
+      <div className="relative overflow-hidden flex items-center justify-between rounded-2xl bg-gradient-to-r from-blue-600 to-cyan-600 p-6 shadow-lg flex-wrap gap-3">
+        <Receipt size={140} className="absolute -right-4 -bottom-8 text-white/10 z-0" />
+        <div className="relative z-10">
           <h1 className="text-2xl font-extrabold text-white drop-shadow-sm">Facturas Electrónicas</h1>
           <p className="text-blue-100 text-sm mt-1">Importa XML DIAN para conciliar con recibos</p>
         </div>
-        <div className="flex gap-2">
+        <div className="relative z-10 flex gap-2">
           {marcadas.size > 0 && (
             <Button variant="destructive" onClick={eliminarMarcadas}>
               <Trash2 size={15} className="mr-1.5" />

@@ -2,7 +2,7 @@
 import { useEffect, useState } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
-import { FileText, PackageCheck, AlertTriangle, Clock, CheckCircle2, XCircle, GitCompareArrows, ShieldCheck } from 'lucide-react'
+import { FileText, PackageCheck, AlertTriangle, Clock, CheckCircle2, XCircle, GitCompareArrows, ShieldCheck, Calculator, PieChart as PieChartIcon, TrafficCone } from 'lucide-react'
 import { storeFacturas, storeRecibos, storeComparaciones } from '@/lib/store'
 import type { Factura, ReciboMercancia, ResultadoComparacion } from '@/types'
 import Link from 'next/link'
@@ -38,11 +38,24 @@ export default function Dashboard() {
 
   const recientes = comparaciones.slice(0, 5)
 
+  // Distribución para el gráfico circular (dona) del dashboard
+  const totalFacturas = facturas.length || 1
+  const pctConDif  = (compConDif  / totalFacturas) * 100
+  const pctSinComp = (sinComparar / totalFacturas) * 100
+  const corteConDif  = pctConDif
+  const corteSinComp = pctConDif + pctSinComp
+  const donaEstilo = facturas.length === 0
+    ? { background: '#e5e7eb' }
+    : { background: `conic-gradient(#ef4444 0% ${corteConDif}%, #f59e0b ${corteConDif}% ${corteSinComp}%, #10b981 ${corteSinComp}% 100%)` }
+
   return (
     <div className="space-y-6">
-      <div className="rounded-2xl bg-gradient-to-r from-blue-600 via-indigo-600 to-violet-600 p-6 shadow-lg">
-        <h1 className="text-3xl font-extrabold text-white drop-shadow-sm">Dashboard</h1>
-        <p className="text-blue-100 text-sm mt-1">Resumen del sistema de conciliación de facturas</p>
+      <div className="relative overflow-hidden rounded-2xl bg-gradient-to-r from-blue-600 via-indigo-600 to-violet-600 p-6 shadow-lg">
+        <Calculator size={140} className="absolute -right-4 -bottom-8 text-white/10 z-0" />
+        <div className="relative z-10">
+          <h1 className="text-3xl font-extrabold text-white drop-shadow-sm">Dashboard</h1>
+          <p className="text-blue-100 text-sm mt-1">Resumen del sistema de conciliación de facturas</p>
+        </div>
       </div>
 
       {/* Verificación: Total = Sin comparar + Con dif + Sin dif */}
@@ -74,6 +87,49 @@ export default function Dashboard() {
             </Card>
           </Link>
         ))}
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <Card className="border-2 border-fuchsia-200 overflow-hidden">
+          <CardHeader className="bg-gradient-to-r from-fuchsia-50 to-pink-50">
+            <CardTitle className="text-base text-fuchsia-800 flex items-center gap-2">
+              <PieChartIcon size={16} className="text-fuchsia-600" /> Distribución de facturas
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="pt-5 flex items-center justify-center gap-8">
+            <div className="w-32 h-32 rounded-full shrink-0" style={donaEstilo}>
+              <div className="w-full h-full rounded-full bg-white/95 flex flex-col items-center justify-center scale-[0.7] shadow-inner">
+                <span className="text-2xl font-bold text-gray-900">{facturas.length}</span>
+                <span className="text-[10px] text-gray-500 leading-tight">facturas</span>
+              </div>
+            </div>
+            <div className="space-y-2 text-sm">
+              <p className="flex items-center gap-2"><span className="w-2.5 h-2.5 rounded-full bg-rose-500 shrink-0" /> Con diferencias: <b>{compConDif}</b></p>
+              <p className="flex items-center gap-2"><span className="w-2.5 h-2.5 rounded-full bg-amber-500 shrink-0" /> Sin comparar: <b>{sinComparar}</b></p>
+              <p className="flex items-center gap-2"><span className="w-2.5 h-2.5 rounded-full bg-emerald-500 shrink-0" /> Sin diferencias: <b>{compSinDif}</b></p>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card className="border-2 border-slate-300 overflow-hidden">
+          <CardHeader className="bg-gradient-to-r from-slate-100 to-gray-100">
+            <CardTitle className="text-base text-slate-800 flex items-center gap-2">
+              <TrafficCone size={16} className="text-slate-600" /> Semáforo de estado
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="pt-5 flex items-center justify-center gap-8">
+            <div className="flex flex-col items-center gap-3 bg-slate-800 rounded-2xl p-3 shadow-inner">
+              <div className={`w-9 h-9 rounded-full ${compConDif > 0 ? 'bg-red-500 shadow-[0_0_14px_4px_rgba(239,68,68,0.6)]' : 'bg-red-950'}`} />
+              <div className={`w-9 h-9 rounded-full ${sinComparar > 0 ? 'bg-amber-400 shadow-[0_0_14px_4px_rgba(251,191,36,0.6)]' : 'bg-amber-950'}`} />
+              <div className={`w-9 h-9 rounded-full ${compSinDif > 0 ? 'bg-emerald-500 shadow-[0_0_14px_4px_rgba(16,185,129,0.6)]' : 'bg-emerald-950'}`} />
+            </div>
+            <div className="space-y-2 text-sm">
+              <p className="flex items-center gap-2"><span className="w-2.5 h-2.5 rounded-full bg-red-500 shrink-0" /> Con diferencias: <b>{compConDif}</b></p>
+              <p className="flex items-center gap-2"><span className="w-2.5 h-2.5 rounded-full bg-amber-400 shrink-0" /> Sin comparar: <b>{sinComparar}</b></p>
+              <p className="flex items-center gap-2"><span className="w-2.5 h-2.5 rounded-full bg-emerald-500 shrink-0" /> Sin diferencias: <b>{compSinDif}</b></p>
+            </div>
+          </CardContent>
+        </Card>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">

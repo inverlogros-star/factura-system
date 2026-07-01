@@ -2,7 +2,7 @@
 import { useEffect, useState, useMemo } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
-import { CalendarIcon, PackageCheck, FileText, AlertTriangle, CheckCircle2, BarChart3, Search } from 'lucide-react'
+import { CalendarIcon, PackageCheck, FileText, AlertTriangle, CheckCircle2, BarChart3, Search, PieChart } from 'lucide-react'
 import { storeFacturas, storeRecibos, storeComparaciones } from '@/lib/store'
 import type { Factura, ReciboMercancia, ResultadoComparacion } from '@/types'
 import Link from 'next/link'
@@ -107,11 +107,14 @@ export default function ReportePage() {
   return (
     <div className="space-y-6">
       {/* Encabezado */}
-      <div className="rounded-2xl bg-gradient-to-r from-cyan-600 to-blue-600 p-6 shadow-lg">
-        <h1 className="text-2xl font-extrabold text-white drop-shadow-sm flex items-center gap-2">
-          <BarChart3 size={24} /> Reporte por Rango de Fechas
-        </h1>
-        <p className="text-cyan-100 text-sm mt-1">Resumen de facturas, recibos y comparaciones en el período seleccionado</p>
+      <div className="relative overflow-hidden rounded-2xl bg-gradient-to-r from-cyan-600 to-blue-600 p-6 shadow-lg">
+        <PieChart size={140} className="absolute -right-4 -bottom-8 text-white/10 z-0" />
+        <div className="relative z-10">
+          <h1 className="text-2xl font-extrabold text-white drop-shadow-sm flex items-center gap-2">
+            <BarChart3 size={24} /> Reporte por Rango de Fechas
+          </h1>
+          <p className="text-cyan-100 text-sm mt-1">Resumen de facturas, recibos y comparaciones en el período seleccionado</p>
+        </div>
       </div>
 
       {/* Selector de fechas */}

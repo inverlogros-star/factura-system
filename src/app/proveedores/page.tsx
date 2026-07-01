@@ -104,7 +104,9 @@ export default function ProveedoresPage() {
   return (
     <div className="space-y-5">
       <div>
-        <h1 className="text-2xl font-bold text-gray-900">Documentos por Proveedor</h1>
+        <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
+          <Building2 size={22} className="text-blue-600" /> Documentos por Proveedor
+        </h1>
         <p className="text-gray-500 text-sm mt-1">Facturas y notas agrupadas por proveedor y fecha</p>
       </div>
 

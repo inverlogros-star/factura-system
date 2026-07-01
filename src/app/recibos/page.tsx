@@ -2,7 +2,7 @@
 import { useEffect, useRef, useState, useMemo } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
-import { Upload, Trash2, PackageCheck, Eye, FileSpreadsheet, FileText, FileCode, Bug, CheckSquare, Square, Database, CalendarIcon, BarChart2, ChevronDown, ChevronUp, CalendarX2, FileDown } from 'lucide-react'
+import { Upload, Trash2, PackageCheck, Eye, FileSpreadsheet, FileText, FileCode, Bug, CheckSquare, Square, Database, CalendarIcon, BarChart2, ChevronDown, ChevronUp, CalendarX2, FileDown, NotebookPen } from 'lucide-react'
 import { fmtRecibo } from '@/lib/utils'
 import { parsearReciboXML } from '@/lib/parser-dian'
 import { parsearReciboExcel } from '@/lib/parser-recibo-excel'
@@ -131,9 +131,11 @@ export default function RecibosPage() {
     if (!fechaInicio || !fechaFin) { toast.error('Selecciona ambas fechas'); return }
     if (fechaInicio > fechaFin) { toast.error('La fecha inicial no puede ser mayor a la final'); return }
 
-    // Abrir ventana del servidor local directamente
+    // Abrir ventana del servidor local directamente.
+    // IP fija de red (no localhost) para que funcione desde cualquier PC
+    // de la LAN, no solo desde el equipo donde corre servidor-local.js.
     window.open(
-      `http://localhost:3002/resultado?desde=${fechaInicio}&hasta=${fechaFin}`,
+      `http://192.168.11.236:3002/resultado?desde=${fechaInicio}&hasta=${fechaFin}`,
       'importar-recibos',
       'width=540,height=440,top=200,left=400'
     )
@@ -173,12 +175,13 @@ export default function RecibosPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between rounded-2xl bg-gradient-to-r from-emerald-600 to-teal-600 p-6 shadow-lg flex-wrap gap-3">
-        <div>
+      <div className="relative overflow-hidden flex items-center justify-between rounded-2xl bg-gradient-to-r from-emerald-600 to-teal-600 p-6 shadow-lg flex-wrap gap-3">
+        <NotebookPen size={140} className="absolute -right-4 -bottom-8 text-white/10 z-0" />
+        <div className="relative z-10">
           <h1 className="text-2xl font-extrabold text-white drop-shadow-sm">Recibos de Mercancía</h1>
           <p className="text-emerald-100 text-sm mt-1">Carga recibos en XML, Excel, PDF o importa desde el sistema</p>
         </div>
-        <div className="flex gap-2 flex-wrap">
+        <div className="relative z-10 flex gap-2 flex-wrap">
           {marcados.size > 0 && (
             <Button variant="destructive" onClick={eliminarMarcados}>
               <Trash2 size={15} className="mr-1.5" /> Eliminar ({marcados.size})

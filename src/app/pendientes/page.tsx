@@ -3,7 +3,7 @@ import { useEffect, useState } from 'react'
 import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { Clock, AlertCircle, Trash2, CheckSquare, Square } from 'lucide-react'
+import { Clock, AlertCircle, Trash2, CheckSquare, Square, Hourglass } from 'lucide-react'
 import { storeFacturas } from '@/lib/store'
 import type { Factura } from '@/types'
 import { toast } from 'sonner'
@@ -38,7 +38,9 @@ export default function PendientesPage() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Facturas Pendientes</h1>
+          <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
+            <Hourglass size={22} className="text-amber-500" /> Facturas Pendientes
+          </h1>
           <p className="text-gray-500 text-sm mt-1">Facturas sin recibo de mercancía asociado</p>
         </div>
         {marcadas.size > 0 && (

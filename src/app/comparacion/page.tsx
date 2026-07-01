@@ -3,7 +3,7 @@ import { useEffect, useState, useMemo } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { GitCompareArrows, ChevronDown, ChevronUp, FileDown, Trash2, CheckSquare, Square, Eye, AlertTriangle, CheckCircle2, Search, FileWarning, X, RefreshCw } from 'lucide-react'
+import { GitCompareArrows, ChevronDown, ChevronUp, FileDown, Trash2, CheckSquare, Square, Eye, AlertTriangle, CheckCircle2, Search, FileWarning, X, RefreshCw, Calculator } from 'lucide-react'
 import { fmtRecibo } from '@/lib/utils'
 import { storeFacturas, storeRecibos, storeComparaciones } from '@/lib/store'
 import { compararFacturaConRecibo, encontrarReciboPorFactura, ultimos4Digitos } from '@/lib/comparador'
@@ -461,14 +461,15 @@ export default function ComparacionPage() {
   return (
     <div className="space-y-5">
       {/* Encabezado */}
-      <div className="flex items-center justify-between flex-wrap gap-3 rounded-2xl bg-gradient-to-r from-indigo-600 to-purple-600 p-6 shadow-lg">
-        <div>
+      <div className="relative overflow-hidden flex items-center justify-between flex-wrap gap-3 rounded-2xl bg-gradient-to-r from-indigo-600 to-purple-600 p-6 shadow-lg">
+        <Calculator size={140} className="absolute -right-4 -bottom-8 text-white/10 z-0" />
+        <div className="relative z-10">
           <h1 className="text-2xl font-extrabold text-white drop-shadow-sm">Comparación de Documentos</h1>
           <p className="text-indigo-100 text-sm mt-1">
             Coteja facturas DIAN con recibos de mercancía usando los últimos 4 dígitos
           </p>
         </div>
-        <div className="flex gap-2 items-center flex-wrap">
+        <div className="relative z-10 flex gap-2 items-center flex-wrap">
           {/* Rango de fechas para filtrar y comparar */}
           <div className="flex items-center gap-1.5 bg-white border border-gray-200 rounded-lg px-2 py-1">
             <span className="text-xs text-gray-400 pl-1">Desde</span>
