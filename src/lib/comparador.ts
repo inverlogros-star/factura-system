@@ -416,10 +416,15 @@ export function compararFacturaConRecibo(
 
     // Precio unitario por unidad base
     const precioF_uds = embalaje ? pf.precioUnitario / embalaje.unidades : pf.precioUnitario
+    // El recibo se convirtió a unidades multiplicando por embalajeR (línea anterior);
+    // el precio debe dividirse por el MISMO factor para seguir siendo "por unidad".
+    // Antes esto no se hacía y el precio de embalaje (ej. precio por caja) se usaba
+    // como si fuera precio por unidad, inflando el valor de mercancía del recibo.
+    const precioR_uds = embalajeR ? pr.precioUnitario / embalajeR.unidades : pr.precioUnitario
 
     const cantF = cantF_uds  // cantidad comparable
     const precioF = precioF_uds
-    const precioR = pr.precioUnitario
+    const precioR = precioR_uds
     const ivaF = pf.impuesto || 0, ivaR = (pr as any).iva || 0
     const icF = 0, icR = (pr as any).iconsumo || 0
     const ibuaF = 0, ibuaR = (pr as any).ibua || 0
